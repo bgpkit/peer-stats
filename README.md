@@ -19,6 +19,15 @@ We collect the following information and metrics for each peer in a table dump f
 This repo also includes a commandline tool, `peer-stats`, that can process one RIB dump
 file at a time from command line.
 
+## Installation
+
+Rust toolchain is required for installing this tool.
+
+Run the following command to install the compiled `peer-stats` tool to `~.cargo/bin/peer-stats`.
+```bash
+cargo install --path .
+```
+
 ## Usage
 
 ```text
