@@ -1,0 +1,28 @@
+[package]
+name = "peer-stats"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bgpkit-parser = "0.7.2"
+bgpkit-broker = "0.3.2"
+ipnetwork = "0.18.0"
+
+serde = {version="1", features=["derive"]}
+serde_json = {version = "1.0", features = ["std"]}
+
+tracing = "0.1"
+tracing-subscriber = "0.3.3"
+
+structopt = {version="0.3", optional=true}
+
+[features]
+default = ["build-binary"]
+build-binary = ["structopt"]
+
+[[bin]]
+name = "peer-stats"
+path = "src/main.rs"
+required-features = ["build-binary"]
