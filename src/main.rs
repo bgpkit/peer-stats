@@ -3,6 +3,8 @@ use serde_json::json;
 use tracing::{info, Level};
 use peer_stats::parse_rib_file;
 use structopt::StructOpt;
+use bgpkit_broker::BgpkitBroker;
+use rayon::prelude::*;
 
 /// peer-stats is a CLI tool that collects peer information from a given RIB dump file.
 #[derive(StructOpt, Debug)]
