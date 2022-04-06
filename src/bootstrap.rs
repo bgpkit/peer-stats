@@ -49,7 +49,7 @@ fn main() {
     // dedicated thread for showing progress of the parsing
     thread::spawn(move || {
         let sty = ProgressStyle::default_bar()
-            .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}")
+            .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {eta} {msg}")
             .progress_chars("##-");
         let pb = ProgressBar::new(total_items as u64);
         pb.set_style(sty);
