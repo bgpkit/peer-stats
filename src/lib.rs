@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
 use ipnetwork::IpNetwork;
 use serde::Serialize;
+use anyhow::Result;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct RibPeerInfo {
@@ -32,33 +33,35 @@ pub struct PeerInfo {
 /// - `peer_asn`
 /// - `num_v4_pfxs`
 /// - `num_v6_pfxs`
-pub fn parse_rib_file(file_url: &str, project: &str, collector: &str) -> RibPeerInfo {
+pub fn parse_rib_file(file_url: &str, project: &str, collector: &str) -> Result<RibPeerInfo> {
 
     let mut peer_asn_map: HashMap<IpAddr, u32> = HashMap::new();
     let mut peer_connection: HashMap<IpAddr, HashSet<u32>> = HashMap::new();
     let mut peer_v4_pfxs_map: HashMap<IpAddr, HashSet<IpNetwork>> = HashMap::new();
     let mut peer_v6_pfxs_map: HashMap<IpAddr, HashSet<IpNetwork>> = HashMap::new();
 
-    for elem in BgpkitParser::new(file_url).unwrap() {
+    for elem in BgpkitParser::new(file_url)? {
         peer_asn_map.entry(elem.peer_ip).or_insert(elem.peer_asn.asn);
-        match elem.as_path.clone().unwrap().segments.get(0) {
-            Some(path) => {
-                match path {
-                    AsPathSegment::AsSequence(a) => {
-                        match a.get(1){
-                            None => {}
-                            Some(asn) => {
-                                peer_connection.entry(elem.peer_ip).or_insert(HashSet::<u32>::new()).insert(asn.asn);
-                            }
-                        };
+        if let Some(as_path) = elem.as_path {
+            match as_path.clone().segments.get(0) {
+                Some(path) => {
+                    match path {
+                        AsPathSegment::AsSequence(a) => {
+                            match a.get(1){
+                                None => {}
+                                Some(asn) => {
+                                    peer_connection.entry(elem.peer_ip).or_insert(HashSet::<u32>::new()).insert(asn.asn);
+                                }
+                            };
+                        }
+                        _ => {}
                     }
-                    _ => {}
                 }
-            }
-            _ => {
-                panic!("{}", elem.as_path.unwrap());
-            }
-        };
+                _ => {
+                    panic!("{}", as_path);
+                }
+            };
+        }
 
         match elem.prefix.prefix.is_ipv4() {
             true => {
@@ -91,12 +94,14 @@ pub fn parse_rib_file(file_url: &str, project: &str, collector: &str) -> RibPeer
     }
 
 
-    RibPeerInfo {
-        project: project.to_string(),
-        collector: collector.to_string(),
-        rib_dump_url: file_url.to_string(),
-        peers: peer_info_map
-    }
+    Ok(
+        RibPeerInfo {
+            project: project.to_string(),
+            collector: collector.to_string(),
+            rib_dump_url: file_url.to_string(),
+            peers: peer_info_map
+        }
+    )
 }
 
 #[cfg(test)]

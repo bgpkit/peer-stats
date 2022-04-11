@@ -22,6 +22,9 @@ rayon = "1.5.1"
 structopt = "0.3.26"
 bzip2 = "0.4.3"
 
+anyhow = "1.0"
+chrono = "0.4.19"
+
 [[bin]]
 name = "peer-stats"
 path = "src/main.rs"

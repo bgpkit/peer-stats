@@ -1,7 +1,6 @@
 use std::{fs, thread};
 use std::fs::File;
 use std::io::{BufWriter, Write};
-use std::path::PathBuf;
 use std::sync::mpsc::channel;
 use serde_json::json;
 use tracing::{info, Level};
@@ -10,6 +9,7 @@ use structopt::StructOpt;
 use bgpkit_broker::{BgpkitBroker, BrokerItem, QueryParams};
 use bzip2::Compression;
 use bzip2::write::BzEncoder;
+use chrono::Datelike;
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 
@@ -59,19 +59,29 @@ fn main() {
         }
     });
 
-    items.par_iter().for_each_with((sender_pb), |(s1), item| {
+    items.par_iter().for_each_with(sender_pb, |s1, item| {
+        let ts = chrono::NaiveDateTime::from_timestamp(item.timestamp.clone(), 0);
+        let file_dir = format!("./results/{}/{}/{}", &item.collector_id, ts.year(), ts.month());
+        fs::create_dir_all(format!("{}", &file_dir)).unwrap();
+        let output_path = format!("{}/{}.bz2", &file_dir, &item.timestamp);
+        if std::path::Path::new(output_path.as_str()).exists() {
+            info!("result file {} already exists, skip processing", output_path);
+            return
+        }
+
         let project = match item.collector_id.starts_with("riperis"){
             true => "riperis".to_string(),
             false => "route-views".to_string()
         };
         info!("start parsing file {}", item.url.as_str());
-        let info = parse_rib_file(item.url.as_str(), project.as_str(), item.collector_id.as_str());
+        let info = match parse_rib_file(item.url.as_str(), project.as_str(), item.collector_id.as_str()){
+            Ok(i) => {i}
+            Err(_) => {return}
+        };
 
-        fs::create_dir_all(format!("./results/{}", &item.collector_id)).unwrap();
-        let output_path = format!("./results/{}/{}.bz2", &item.collector_id, &item.timestamp);
-
+        // TODO: connect to database
         let file = match File::create(&output_path) {
-            Err(why) => panic!("couldn't open {}", output_path),
+            Err(_why) => panic!("couldn't open {}", output_path),
             Ok(file) => file,
         };
 
@@ -81,8 +91,8 @@ fn main() {
             compressor,
         );
 
-        writer.write_all(serde_json::to_string_pretty(&json!(info)).unwrap().as_ref());
+        let _ = writer.write_all(serde_json::to_string_pretty(&json!(info)).unwrap().as_ref());
+        let _ = s1.send(format!("{}-{}", item.collector_id.as_str(), item.timestamp));
         info!("processing file {} finished", item.url.as_str());
-        s1.send(format!("{}-{}", item.collector_id.as_str(), item.timestamp));
     });
 }
