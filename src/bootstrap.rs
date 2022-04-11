@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::sync::mpsc::channel;
 use serde_json::json;
-use tracing::{info, Level};
+use tracing::{error, info, Level};
 use peer_stats::parse_rib_file;
 use structopt::StructOpt;
 use bgpkit_broker::{BgpkitBroker, BrokerItem, QueryParams};
@@ -76,7 +76,10 @@ fn main() {
         info!("start parsing file {}", item.url.as_str());
         let info = match parse_rib_file(item.url.as_str(), project.as_str(), item.collector_id.as_str()){
             Ok(i) => {i}
-            Err(_) => {return}
+            Err(_) => {
+                error!("processing of file {} failed", item.url.as_str());
+                return
+            }
         };
 
         // TODO: connect to database
