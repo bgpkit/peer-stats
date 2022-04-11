@@ -66,6 +66,7 @@ fn main() {
         let output_path = format!("{}/{}.bz2", &file_dir, &item.timestamp);
         if std::path::Path::new(output_path.as_str()).exists() {
             info!("result file {} already exists, skip processing", output_path);
+            let _ = s1.send(format!("{}-{}", item.collector_id.as_str(), item.timestamp));
             return
         }
 
@@ -78,6 +79,7 @@ fn main() {
             Ok(i) => {i}
             Err(_) => {
                 error!("processing of file {} failed", item.url.as_str());
+                let _ = s1.send(format!("{}-{}", item.collector_id.as_str(), item.timestamp));
                 return
             }
         };
