@@ -42,7 +42,7 @@ pub fn parse_rib_file(file_url: &str, project: &str, collector: &str) -> Result<
 
     for elem in BgpkitParser::new(file_url)? {
         peer_asn_map.entry(elem.peer_ip).or_insert(elem.peer_asn.asn);
-        if let Some(as_path) = elem.as_path {
+        if let Some(as_path) = elem.as_path.clone() {
             match as_path.clone().segments.get(0) {
                 Some(path) => {
                     match path {
@@ -75,6 +75,7 @@ pub fn parse_rib_file(file_url: &str, project: &str, collector: &str) -> Result<
                     .insert(elem.prefix.prefix);
             }
         }
+        drop(elem);
     }
 
     let mut peer_info_map: HashMap<IpAddr, PeerInfo> = HashMap::new();
