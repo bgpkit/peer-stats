@@ -49,7 +49,7 @@ fn main() {
     };
 
     let info = parse_rib_file(file_path,
-                              project.as_str(), collector.as_str());
+                              project.as_str(), collector.as_str()).unwrap();
 
     println!("{}", serde_json::to_string_pretty(&json!(info)).unwrap());
     info!("finished");
