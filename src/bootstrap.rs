@@ -10,7 +10,7 @@ use structopt::StructOpt;
 use bgpkit_broker::{BgpkitBroker, BrokerItem, QueryParams};
 use bzip2::Compression;
 use bzip2::write::BzEncoder;
-use chrono::Datelike;
+use chrono::{Datelike, Timelike};
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 
@@ -26,6 +26,10 @@ struct Opts {
     #[structopt(long)]
     dry_run: bool,
 
+    /// whether to do only daily parsing
+    #[structopt(long)]
+    only_daily: bool,
+
     /// start timestamp
     #[structopt(long)]
     ts_start: String,
@@ -37,6 +41,8 @@ struct Opts {
     /// Output directory
     #[structopt(long)]
     output_dir: PathBuf,
+
+
 }
 
 fn main() {
@@ -55,10 +61,17 @@ fn main() {
         ts_start: Some(opts.ts_start),
         ts_end: Some(opts.ts_end),
         data_type: Some("rib".to_string()),
-        page_size: 100000,
+        page_size: 10000,
         ..Default::default()
     });
-    let items: Vec<BrokerItem> = broker.into_iter().collect();
+    let items: Vec<BrokerItem> = broker.into_iter().filter( |item| {
+        if !opts.only_daily {
+            return true
+        }
+        // only process the first one per-day
+        return item.ts_start.hour() == 0
+    }
+    ).collect();
     let total_items = items.len();
 
     if opts.dry_run {
@@ -91,7 +104,7 @@ fn main() {
 
         let file_dir = format!("{}/{}/{:02}/{:02}", output_dir, &item.collector_id, ts.year(), ts.month());
         fs::create_dir_all(format!("{}", &file_dir)).unwrap();
-        let output_path = format!("{}/{}.bz2", &file_dir, &timestamp);
+        let output_path = format!("{}/{}-{}.bz2", &file_dir, &item.collector_id, &timestamp);
         if std::path::Path::new(output_path.as_str()).exists() {
             info!("result file {} already exists, skip processing", output_path);
             let _ = s1.send(format!("{}-{}", item.collector_id.as_str(), timestamp));
