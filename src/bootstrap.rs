@@ -1,6 +1,7 @@
 use std::{fs, thread};
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use std::path::PathBuf;
 use std::sync::mpsc::channel;
 use serde_json::json;
 use tracing::{error, info, Level};
@@ -33,7 +34,9 @@ struct Opts {
     #[structopt(long)]
     ts_end: String,
 
-
+    /// Output directory
+    #[structopt(long)]
+    output_dir: PathBuf,
 }
 
 fn main() {
@@ -80,11 +83,13 @@ fn main() {
         }
     });
 
+    let output_dir = opts.output_dir.to_str().unwrap();
+
     items.par_iter().for_each_with(sender_pb, |s1, item| {
         let ts = item.ts_start.clone();
         let timestamp = ts.timestamp();
 
-        let file_dir = format!("./results/{}/{:02}/{:02}", &item.collector_id, ts.year(), ts.month());
+        let file_dir = format!("{}/{}/{:02}/{:02}", output_dir, &item.collector_id, ts.year(), ts.month());
         fs::create_dir_all(format!("{}", &file_dir)).unwrap();
         let output_path = format!("{}/{}.bz2", &file_dir, &timestamp);
         if std::path::Path::new(output_path.as_str()).exists() {
