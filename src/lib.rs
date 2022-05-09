@@ -83,10 +83,12 @@ pub fn parse_rib_file(file_url: &str, project: &str, collector: &str) -> Result<
         let num_v4_pfxs = peer_v4_pfxs_map.entry(ip).or_default().len();
         let num_v6_pfxs = peer_v6_pfxs_map.entry(ip).or_default().len();
         let num_connected_asn = peer_connection.entry(ip).or_default().len();
+        let ip_clone = ip.clone();
+        let asn_clone = asn.clone();
         peer_info_map.insert(
-            ip.clone(), PeerInfo{
-                ip,
-                asn,
+            ip_clone.clone(), PeerInfo{
+                ip: ip_clone,
+                asn: asn_clone,
                 num_v4_pfxs,
                 num_v6_pfxs,
                 num_connected_asns: num_connected_asn,

@@ -102,29 +102,33 @@ fn main() {
             true => "riperis".to_string(),
             false => "route-views".to_string()
         };
-        info!("start parsing file {}", item.url.as_str());
-        let info = match parse_rib_file(item.url.as_str(), project.as_str(), item.collector_id.as_str()){
-            Ok(i) => {i}
-            Err(_) => {
-                error!("processing of file {} failed", item.url.as_str());
-                let _ = s1.send(format!("{}-{}", item.collector_id.as_str(), timestamp));
-                return
-            }
-        };
 
-        // TODO: connect to database
-        let file = match File::create(&output_path) {
-            Err(_why) => panic!("couldn't open {}", output_path),
-            Ok(file) => file,
-        };
+        // parsing and writing out info, manually scoping to potentially avoid memory issue
+        {
+            info!("start parsing file {}", item.url.as_str());
+            let info = match parse_rib_file(item.url.as_str(), project.as_str(), item.collector_id.as_str()){
+                Ok(i) => {i}
+                Err(_) => {
+                    error!("processing of file {} failed", item.url.as_str());
+                    let _ = s1.send(format!("{}-{}", item.collector_id.as_str(), timestamp));
+                    return
+                }
+            };
 
-        let compressor = BzEncoder::new(file, Compression::best());
-        let mut writer = BufWriter::with_capacity(
-            128 * 1024,
-            compressor,
-        );
+            let file = match File::create(&output_path) {
+                Err(_why) => panic!("couldn't open {}", output_path),
+                Ok(file) => file,
+            };
 
-        let _ = writer.write_all(serde_json::to_string_pretty(&json!(info)).unwrap().as_ref());
+            let compressor = BzEncoder::new(file, Compression::best());
+            let mut writer = BufWriter::with_capacity(
+                128 * 1024,
+                compressor,
+            );
+
+            let _ = writer.write_all(serde_json::to_string_pretty(&json!(info)).unwrap().as_ref());
+        }
+
         let _ = s1.send(format!("{}-{}", item.collector_id.as_str(), timestamp));
         info!("processing file {} finished", item.url.as_str());
     });
