@@ -71,10 +71,11 @@ dependencies = [
 
 [[package]]
 name = "bgpkit-broker"
-version = "0.3.2"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "556be3703d7cb7ce747728175c2ded6461652632f084206c49abdd8a8164a0cb"
+checksum = "971b661282977658dead3d115e39371b8ec301ec13a2fb802ad15cde03105a9b"
 dependencies = [
+ "chrono",
  "log",
  "reqwest",
  "serde",
@@ -164,6 +165,7 @@ dependencies = [
  "libc",
  "num-integer",
  "num-traits 0.2.14",
+ "serde",
  "time",
  "winapi",
 ]

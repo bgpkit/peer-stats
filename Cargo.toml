@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 bgpkit-parser = "0.7.2"
-bgpkit-broker = "0.3.2"
+bgpkit-broker = "0.4"
 ipnetwork = "0.18.0"
 
 serde = {version="1", features=["derive"]}

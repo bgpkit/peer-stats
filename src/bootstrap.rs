@@ -20,6 +20,20 @@ struct Opts {
     /// whether to print debug
     #[structopt(long)]
     debug: bool,
+
+    /// whether to dry run the code
+    #[structopt(long)]
+    dry_run: bool,
+
+    /// start timestamp
+    #[structopt(long)]
+    ts_start: String,
+
+    /// end timestamp
+    #[structopt(long)]
+    ts_end: String,
+
+
 }
 
 fn main() {
@@ -33,16 +47,23 @@ fn main() {
             .init();
     }
 
-    let broker = BgpkitBroker::new_with_params("https://api.broker.bgpkit.com/v1", QueryParams{
-        start_ts: Some(1609459200),
-        end_ts: Some(1640995200),
+    info!("start querying broker for available RIB dump files.");
+    let broker = BgpkitBroker::new_with_params("https://api.broker.bgpkit.com/v2", QueryParams{
+        ts_start: Some(opts.ts_start),
+        ts_end: Some(opts.ts_end),
         data_type: Some("rib".to_string()),
         page_size: 100000,
         ..Default::default()
     });
     let items: Vec<BrokerItem> = broker.into_iter().collect();
-
     let total_items = items.len();
+
+    if opts.dry_run {
+        info!("total of {total_items} RIB dump files to process");
+        info!("first RIB is {}", items.first().unwrap().url);
+        info!("last RIB is {}", items.last().unwrap().url);
+        return
+    }
 
     let (sender_pb, receiver_pb) = channel::<String>();
 
@@ -60,13 +81,15 @@ fn main() {
     });
 
     items.par_iter().for_each_with(sender_pb, |s1, item| {
-        let ts = chrono::NaiveDateTime::from_timestamp(item.timestamp.clone(), 0);
-        let file_dir = format!("./results/{}/{}/{}", &item.collector_id, ts.year(), ts.month());
+        let ts = item.ts_start.clone();
+        let timestamp = ts.timestamp();
+
+        let file_dir = format!("./results/{}/{:02}/{:02}", &item.collector_id, ts.year(), ts.month());
         fs::create_dir_all(format!("{}", &file_dir)).unwrap();
-        let output_path = format!("{}/{}.bz2", &file_dir, &item.timestamp);
+        let output_path = format!("{}/{}.bz2", &file_dir, &timestamp);
         if std::path::Path::new(output_path.as_str()).exists() {
             info!("result file {} already exists, skip processing", output_path);
-            let _ = s1.send(format!("{}-{}", item.collector_id.as_str(), item.timestamp));
+            let _ = s1.send(format!("{}-{}", item.collector_id.as_str(), timestamp));
             return
         }
 
@@ -79,7 +102,7 @@ fn main() {
             Ok(i) => {i}
             Err(_) => {
                 error!("processing of file {} failed", item.url.as_str());
-                let _ = s1.send(format!("{}-{}", item.collector_id.as_str(), item.timestamp));
+                let _ = s1.send(format!("{}-{}", item.collector_id.as_str(), timestamp));
                 return
             }
         };
@@ -97,7 +120,7 @@ fn main() {
         );
 
         let _ = writer.write_all(serde_json::to_string_pretty(&json!(info)).unwrap().as_ref());
-        let _ = s1.send(format!("{}-{}", item.collector_id.as_str(), item.timestamp));
+        let _ = s1.send(format!("{}-{}", item.collector_id.as_str(), timestamp));
         info!("processing file {} finished", item.url.as_str());
     });
 }
