@@ -41,8 +41,6 @@ struct Opts {
     /// Output directory
     #[structopt(long)]
     output_dir: PathBuf,
-
-
 }
 
 fn main() {
@@ -104,7 +102,7 @@ fn main() {
 
         let file_dir = format!("{}/{}/{:02}/{:02}", output_dir, &item.collector_id, ts.year(), ts.month());
         fs::create_dir_all(format!("{}", &file_dir)).unwrap();
-        let output_path = format!("{}/{}-{}.bz2", &file_dir, &item.collector_id, &timestamp);
+        let output_path = format!("{}/{}-{}-{:02}-{:02}-{}.bz2", &file_dir, &item.collector_id, ts.year(), ts.month(), ts.day(), &timestamp);
         if std::path::Path::new(output_path.as_str()).exists() {
             info!("result file {} already exists, skip processing", output_path);
             let _ = s1.send(format!("{}-{}", item.collector_id.as_str(), timestamp));
