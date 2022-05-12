@@ -58,7 +58,8 @@ pub fn parse_rib_file(file_url: &str, project: &str, collector: &str) -> Result<
                     }
                 }
                 _ => {
-                    panic!("{}", as_path);
+                    // panic!("{}", as_path);
+                    continue;
                 }
             };
         }
