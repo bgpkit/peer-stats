@@ -14,12 +14,14 @@ We collect the following information and metrics for each peer in a table dump f
 - `num_v6_pfxs`: the number of IPv6 IP prefixes from this peer
 - `num_connected_asns`: the number of unique next-hop ASNs connected to this peer
 
-## Commandline Tool
+## Public Dataset
 
-This repo also includes a commandline tool, `peer-stats`, that can process one RIB dump
-file at a time from command line.
+We provide a publicly available dataset at https://data.bgpkit.com/peer-stats. 
+We update this dataset daily and also provide historical data archive back to 2012.
 
-## Installation
+## Usage
+
+###  Installation
 
 Rust toolchain is required for installing this tool.
 
@@ -28,7 +30,6 @@ Run the following command to install the compiled `peer-stats` tool to `~.cargo/
 cargo install --path .
 ```
 
-## Usage
 
 ### Single-file Processing
 ```text
