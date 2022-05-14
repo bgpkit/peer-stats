@@ -30,6 +30,7 @@ cargo install --path .
 
 ## Usage
 
+### Single-file Processing
 ```text
 (venv) ➜  peer-stats git:(main) ✗ peer-stats --help
 peer-stats 0.1.0
@@ -50,6 +51,28 @@ ARGS:
 Example:
 ```bash
 peer-stats --debug http://archive.routeviews.org/route-views.sg/bgpdata/2022.02/RIBS/rib.20220205.1800.bz2 
+```
+
+### Historical Data Bootstrap
+
+```text
+peer-stats 0.1.0
+peer-stats is a CLI tool that collects peer information from a given RIB dump file
+
+USAGE:
+    peer-stats-bootstrap [FLAGS] --output-dir <output-dir> --ts-end <ts-end> --ts-start <ts-start>
+
+FLAGS:
+        --debug         whether to print debug
+        --dry-run       whether to dry run the code
+    -h, --help          Prints help information
+        --only-daily    whether to do only daily parsing
+    -V, --version       Prints version information
+
+OPTIONS:
+        --output-dir <output-dir>    Output directory
+        --ts-end <ts-end>            end timestamp
+        --ts-start <ts-start>        start timestamp
 ```
 
 ## Output
@@ -74,3 +97,7 @@ The format is as follows (removed all peers info but one for conciseness):
   }
 }
 ```
+
+## LICENSE
+
+This work is under [MIT](LICENSE) license.
