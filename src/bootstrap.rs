@@ -109,7 +109,7 @@ fn main() {
             return
         }
 
-        let project = match item.collector_id.starts_with("riperis"){
+        let project = match item.collector_id.starts_with("rrc"){
             true => "riperis".to_string(),
             false => "route-views".to_string()
         };
