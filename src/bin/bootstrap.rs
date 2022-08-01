@@ -6,45 +6,45 @@ use std::sync::mpsc::channel;
 use serde_json::json;
 use tracing::{error, info, Level};
 use peer_stats::parse_rib_file;
-use structopt::StructOpt;
 use bgpkit_broker::{BgpkitBroker, BrokerItem, QueryParams};
 use bzip2::Compression;
 use bzip2::write::BzEncoder;
 use chrono::{Datelike, Timelike};
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
+use clap::Parser;
 
 /// peer-stats is a CLI tool that collects peer information from a given RIB dump file.
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 #[structopt(name="peer-stats")]
 struct Opts {
     /// whether to print debug
-    #[structopt(long)]
+    #[clap(long)]
     debug: bool,
 
     /// whether to dry run the code
-    #[structopt(long)]
+    #[clap(long)]
     dry_run: bool,
 
     /// whether to do only daily parsing
-    #[structopt(long)]
+    #[clap(long)]
     only_daily: bool,
 
     /// start timestamp
-    #[structopt(long)]
+    #[clap(long)]
     ts_start: String,
 
     /// end timestamp
-    #[structopt(long)]
+    #[clap(long)]
     ts_end: String,
 
     /// Output directory
-    #[structopt(long)]
+    #[clap(long)]
     output_dir: PathBuf,
 }
 
 fn main() {
-    let opts: Opts = Opts::from_args();
+    let opts = Opts::parse();
 
     if opts.debug {
         tracing_subscriber::fmt()

@@ -19,16 +19,23 @@ tracing-subscriber = "0.3.3"
 indicatif = "0.15"
 
 rayon = "1.5.1"
-structopt = "0.3.26"
 bzip2 = "0.4.3"
+clap = { version = "3.2.8", features = ["derive"] }
+
+walkdir = "2.3.2"
+rusqlite = { version = "0.28.0", features = ["bundled"] }
 
 anyhow = "1.0"
 chrono = "0.4.19"
 
 [[bin]]
-name = "peer-stats"
-path = "src/main.rs"
+name = "peer-stats-single-file"
+path = "src/bin/single-file.rs"
 
 [[bin]]
 name = "peer-stats-bootstrap"
-path = "src/bootstrap.rs"
+path = "src/bin/bootstrap.rs"
+
+[[bin]]
+name = "peer-stats-index"
+path = "src/bin/index.rs"
