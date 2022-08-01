@@ -2,17 +2,16 @@ use std::path::PathBuf;
 use serde_json::json;
 use tracing::{info, Level};
 use peer_stats::parse_rib_file;
-use structopt::StructOpt;
+use clap::Parser;
 
 /// peer-stats is a CLI tool that collects peer information from a given RIB dump file.
-#[derive(StructOpt, Debug)]
-#[structopt(name="peer-stats")]
+#[derive(Parser, Debug)]
 struct Opts {
     /// File path to a MRT file, local or remote.
     rib_file: PathBuf,
 
     /// whether to print debug
-    #[structopt(long)]
+    #[clap(long)]
     debug: bool,
 }
 
