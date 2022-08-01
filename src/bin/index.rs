@@ -167,7 +167,6 @@ fn main(){
                                 }
                             };
 
-                            dbg!(&expected_dates);
                             return if expected_dates.into_iter().any(|(y, m, d)| {
                                 y == year && m == month && d == day
                             }) {
