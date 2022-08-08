@@ -47,7 +47,6 @@ fn main(){
                 Some(entry) => {
                     let path: String = entry.path().to_str().unwrap().to_string();
                     let path_str = path.as_str();
-                    dbg!(&path_str);
                     if path_str.contains("as2rel_") && path_str.ends_with(".bz2") {
                         let (year, month, day) = get_ymd_from_file(path.as_str());
                         let ts = Utc::now();
