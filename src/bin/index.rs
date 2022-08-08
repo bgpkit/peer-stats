@@ -124,6 +124,16 @@ struct Opts {
     debug: bool,
 }
 
+fn get_ymd_from_file(file_path: &str) -> (i32, u32, u32) {
+    let date_part = file_path.split('_').collect::<Vec<&str>>();
+    let parts = date_part[date_part.len()-2].split('-').collect::<Vec<&str>>();
+    (
+        parts[0].parse::<i32>().unwrap(),
+        parts[1].parse::<u32>().unwrap(),
+        parts[2].parse::<u32>().unwrap(),
+    )
+}
+
 fn main(){
     let opts = Opts::parse();
 
@@ -144,12 +154,7 @@ fn main(){
                         if opts.bootstrap {
                             return Some(path)
                         } else {
-                            let parts = path.as_str().split("-").collect::<Vec<&str>>();
-                            let (year, month, day) = (
-                                parts[parts.len()-4].parse::<i32>().unwrap(),
-                                parts[parts.len()-3].parse::<u32>().unwrap(),
-                                parts[parts.len()-2].parse::<u32>().unwrap(),
-                                );
+                            let (year, month, day) = get_ymd_from_file(path.as_str());
                             let ts = Utc::now();
                             let ts2 = ts - chrono::Duration::days(1);
 
@@ -194,5 +199,16 @@ fn main(){
         } else {
             info!("processing {} finished ", file.as_str());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_file_date() {
+        assert_eq!(get_ymd_from_file("peer-stats_rrc16_2022-02-01_1643673600.bz2"), (2022,2,1));
+        assert_eq!(get_ymd_from_file("/aaa_bbb-ccc/peer-stats_rrc16_2022-02-01_1643673600.bz2"), (2022,2,1));
     }
 }
