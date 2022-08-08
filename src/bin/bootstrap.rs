@@ -128,7 +128,7 @@ fn main() {
                 let _ = s1.send(format!("{}-{}", item.collector_id.as_str(), timestamp));
                 return
             }
-            file_path_map.insert(data_type.to_string(), output_path).unwrap();
+            file_path_map.insert(data_type.to_string(), output_path);
         }
 
         let project = match item.collector_id.starts_with("rrc"){
