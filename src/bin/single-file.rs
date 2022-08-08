@@ -45,9 +45,9 @@ fn main() {
         }
     };
 
-    let info = parse_rib_file(file_path,
+    let (peer_stats, _pfx2as, _as2rel) = parse_rib_file(file_path,
                               project.as_str(), collector.as_str()).unwrap();
 
-    println!("{}", serde_json::to_string_pretty(&json!(info)).unwrap());
+    println!("{}", serde_json::to_string_pretty(&json!(peer_stats)).unwrap());
     info!("finished");
 }
