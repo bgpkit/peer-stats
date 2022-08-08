@@ -46,3 +46,7 @@ path = "src/bin/index-peer-stats.rs"
 [[bin]]
 name = "as2rel-index"
 path = "src/bin/index-as2rel.rs"
+
+[[bin]]
+name = "pfx2as-index"
+path = "src/bin/index-pfx2as.rs"

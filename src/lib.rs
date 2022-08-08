@@ -24,7 +24,7 @@ pub struct PeerInfo {
     pub num_connected_asns: usize,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Prefix2As {
     pub project: String,
     pub collector: String,
@@ -33,7 +33,7 @@ pub struct Prefix2As {
     pub pfx2as: Vec<Prefix2AsCount>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Prefix2AsCount {
     pub prefix: String,
     pub asn: u32,
