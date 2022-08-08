@@ -6,7 +6,6 @@ use ipnetwork::IpNetwork;
 use serde::Serialize;
 use anyhow::Result;
 use itertools::Itertools;
-use tracing::info;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct RibPeerInfo {
@@ -86,11 +85,7 @@ pub fn parse_rib_file(file_url: &str, project: &str, collector: &str) -> Result<
     // as2rel
     let mut as2rel_map: HashMap<(u32, u32, u8), usize> = HashMap::new();
 
-    for (elem_count, elem) in (BgpkitParser::new(file_url)?).into_iter().enumerate() {
-
-        if elem_count % 1000 == 0 {
-            info!("{}", elem);
-        }
+    for (_elem_count, elem) in (BgpkitParser::new(file_url)?).into_iter().enumerate() {
 
         peer_asn_map.entry(elem.peer_ip).or_insert(elem.peer_asn.asn);
         if let Some(as_path) = elem.as_path.clone() {
