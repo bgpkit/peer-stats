@@ -56,7 +56,10 @@ pub struct As2RelCount {
     asn2: u32,
     /// 1 - asn1 is upstream of asn2, 2 - peer, 0 - unknown
     rel: u8,
-    count: usize,
+    /// number of paths having this relationship
+    paths_count: usize,
+    /// number of peers seeing this relationship
+    peers_count: usize,
 }
 
 const TIER1: [u32; 17] = [ 6762, 12956, 2914, 3356, 6453, 1239, 701 , 6461, 3257, 1299, 3491, 7018, 3320, 5511, 6830, 174 , 6939, ];
@@ -83,7 +86,7 @@ pub fn parse_rib_file(file_url: &str, project: &str, collector: &str) -> Result<
     let mut pfx2as_map: HashMap<(String, u32), usize> = HashMap::new();
 
     // as2rel
-    let mut as2rel_map: HashMap<(u32, u32, u8), usize> = HashMap::new();
+    let mut as2rel_map: HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)> = HashMap::new();
 
     for (_elem_count, elem) in (BgpkitParser::new(file_url)?).into_iter().enumerate() {
 
@@ -111,12 +114,11 @@ pub fn parse_rib_file(file_url: &str, project: &str, collector: &str) -> Result<
                             }
                         }
 
-                        // as2rel
-
                         // counting peer relationships
                         for (asn1, asn2) in u32_path.iter().tuple_windows::<(&u32, &u32)>(){
-                            let count = as2rel_map.entry((*asn1, *asn2, 0)).or_insert(0);
-                            *count += 1;
+                            let (msg_count, peers) = as2rel_map.entry((*asn1, *asn2, 0)).or_insert((0, HashSet::new()));
+                            *msg_count += 1;
+                            peers.insert(elem.peer_ip);
                         }
 
                         let contains_tier1 = u32_path.iter().any(|x| TIER1.contains(x));
@@ -135,8 +137,9 @@ pub fn parse_rib_file(file_url: &str, project: &str, collector: &str) -> Result<
                             if first_tier1<u32_path.len()-1{
                                 for i in 0..first_tier1 {
                                     let (asn1, asn2) = (u32_path.get(i).unwrap(), u32_path.get(i+1).unwrap());
-                                    let count = as2rel_map.entry((*asn2, *asn1, 1)).or_insert(0);
-                                    *count+=1;
+                                    let (msg_count, peers) = as2rel_map.entry((*asn2, *asn1, 1)).or_insert((0, HashSet::new()));
+                                    *msg_count += 1;
+                                    peers.insert(elem.peer_ip);
                                 }
                             }
                         }
@@ -191,12 +194,13 @@ pub fn parse_rib_file(file_url: &str, project: &str, collector: &str) -> Result<
         }
     }).collect();
 
-    let as2rel = as2rel_map.into_iter().map(|((asn1, asn2, rel), count)| {
+    let as2rel = as2rel_map.into_iter().map(|((asn1, asn2, rel), (msg_count, peers))| {
         As2RelCount{
             asn1,
             asn2,
             rel,
-            count
+            paths_count: msg_count,
+            peers_count: peers.len(),
         }
     }).collect();
 
