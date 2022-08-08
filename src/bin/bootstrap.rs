@@ -122,7 +122,7 @@ fn main() {
         for data_type in data_types {
             let file_dir = format!("{}/{}/{}/{:02}/{:02}", output_dir, data_type, &item.collector_id, ts.year(), ts.month());
             fs::create_dir_all(file_dir.as_str()).unwrap();
-            let output_path = format!("{}/{}-{}-{}-{:02}-{:02}-{}.bz2", &file_dir, data_type, &item.collector_id, ts.year(), ts.month(), ts.day(), &timestamp);
+            let output_path = format!("{}/{}_{}_{}-{:02}-{:02}_{}.bz2", &file_dir, data_type, &item.collector_id, ts.year(), ts.month(), ts.day(), &timestamp);
             if std::path::Path::new(output_path.as_str()).exists() {
                 info!("result file {} already exists, skip processing", output_path);
                 let _ = s1.send(format!("{}-{}", item.collector_id.as_str(), timestamp));
