@@ -143,7 +143,7 @@ fn main(){
 
     let db = PeerStatsDb::new(&Some(opts.db_file.to_str().unwrap().to_string()));
 
-    let file_paths = WalkDir::new(opts.data_dir.to_str().unwrap().to_string())
+    let file_paths = WalkDir::new(opts.data_dir.to_str().unwrap())
         .follow_links(true)
         .into_iter()
         .filter_map(|e| {
@@ -151,8 +151,8 @@ fn main(){
                 Some(entry) => {
                     let path: String = entry.path().to_str().unwrap().to_string();
                     if path.as_str().ends_with(".bz2") {
-                        if opts.bootstrap {
-                            return Some(path)
+                        return if opts.bootstrap {
+                            Some(path)
                         } else {
                             let (year, month, day) = get_ymd_from_file(path.as_str());
                             let ts = Utc::now();
@@ -161,18 +161,18 @@ fn main(){
                             let expected_dates = match ts.month() == ts2.month() {
                                 true => {
                                     vec![
-                                        (ts.year(), ts.month(),ts.day())
+                                        (ts.year(), ts.month(), ts.day())
                                     ]
                                 }
                                 false => {
                                     vec![
-                                        (ts.year(), ts.month(),ts.day()),
-                                        (ts2.year(), ts2.month(),ts2.day()),
+                                        (ts.year(), ts.month(), ts.day()),
+                                        (ts2.year(), ts2.month(), ts2.day()),
                                     ]
                                 }
                             };
 
-                            return if expected_dates.into_iter().any(|(y, m, d)| {
+                            if expected_dates.into_iter().any(|(y, m, d)| {
                                 y == year && m == month && d == day
                             }) {
                                 Some(path)
@@ -181,12 +181,11 @@ fn main(){
                             }
                         }
                     }
-                    return None
+                    None
                 }
                 None => {None}
             }
-        }
-        ).collect::<Vec<String>>();
+        }).collect::<Vec<String>>();
 
     for file in file_paths {
         info!("processing {}", file.as_str());

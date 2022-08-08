@@ -21,6 +21,7 @@ indicatif = "0.15"
 rayon = "1.5.1"
 bzip2 = "0.4.3"
 clap = { version = "3.2.8", features = ["derive"] }
+oneio = {version ="0.3.0", features = ["lib_only"]}
 
 walkdir = "2.3.2"
 rusqlite = { version = "0.28.0", features = ["bundled"] }
@@ -40,4 +41,8 @@ path = "src/bin/bootstrap.rs"
 
 [[bin]]
 name = "peer-stats-index"
-path = "src/bin/index.rs"
+path = "src/bin/index-peer-stats.rs"
+
+[[bin]]
+name = "as2rel-index"
+path = "src/bin/index-as2rel.rs"

@@ -929,6 +929,7 @@ dependencies = [
  "indicatif",
  "ipnetwork",
  "itertools",
+ "oneio",
  "rayon",
  "rusqlite",
  "serde",

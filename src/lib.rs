@@ -3,66 +3,81 @@ use bgpkit_parser::{AsPathSegment, BgpkitParser};
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
 use ipnetwork::IpNetwork;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use anyhow::Result;
 use itertools::Itertools;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct RibPeerInfo {
-    project: String,
-    collector: String,
-    rib_dump_url: String,
-    peers: HashMap<IpAddr, PeerInfo>,
+    pub project: String,
+    pub collector: String,
+    pub rib_dump_url: String,
+    pub peers: HashMap<IpAddr, PeerInfo>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct PeerInfo {
-    ip: IpAddr,
-    asn: u32,
-    num_v4_pfxs: usize,
-    num_v6_pfxs: usize,
-    num_connected_asns: usize,
+    pub ip: IpAddr,
+    pub asn: u32,
+    pub num_v4_pfxs: usize,
+    pub num_v6_pfxs: usize,
+    pub num_connected_asns: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Prefix2As {
-    project: String,
-    collector: String,
-    rib_dump_url: String,
+    pub project: String,
+    pub collector: String,
+    pub rib_dump_url: String,
     /// prefix to as mapping: <prefix, <asn, count>>
-    pfx2as: Vec<Prefix2AsCount>,
+    pub pfx2as: Vec<Prefix2AsCount>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Prefix2AsCount {
-    prefix: String,
-    asn: u32,
-    count: usize,
+    pub prefix: String,
+    pub asn: u32,
+    pub count: usize,
 }
 
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct As2Rel {
-    project: String,
-    collector: String,
-    rib_dump_url: String,
+    pub project: String,
+    pub collector: String,
+    pub rib_dump_url: String,
     /// prefix to as mapping: <prefix, <asn, count>>
-    as2rel: Vec<As2RelCount>,
+    pub as2rel: Vec<As2RelCount>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct As2RelCount {
-    asn1: u32,
-    asn2: u32,
+    pub asn1: u32,
+    pub asn2: u32,
     /// 1 - asn1 is upstream of asn2, 2 - peer, 0 - unknown
-    rel: u8,
+    pub rel: u8,
     /// number of paths having this relationship
-    paths_count: usize,
+    pub paths_count: usize,
     /// number of peers seeing this relationship
-    peers_count: usize,
+    pub peers_count: usize,
 }
 
 const TIER1: [u32; 17] = [ 6762, 12956, 2914, 3356, 6453, 1239, 701 , 6461, 3257, 1299, 3491, 7018, 3320, 5511, 6830, 174 , 6939, ];
+
+fn dedup_path(path: Vec<u32>) -> Vec<u32> {
+    if path.len()<=1 {
+        return path
+    }
+
+    let mut new_path = vec![path[0]];
+
+    for (asn1, asn2) in path.into_iter().tuple_windows::<(u32, u32)>() {
+        if asn1!=asn2 {
+            new_path.push(asn2)
+        }
+    }
+    new_path
+}
 
 /// collect information from a provided RIB file
 ///
@@ -95,12 +110,17 @@ pub fn parse_rib_file(file_url: &str, project: &str, collector: &str) -> Result<
             match as_path.clone().segments.get(0) {
                 Some(path) => {
                     if let AsPathSegment::AsSequence(a) = path {
-                        let mut u32_path = a.iter().map(|x| x.asn.clone()).collect::<Vec<u32>>();
+                        let mut u32_path = dedup_path(
+                            a.iter()
+                                .map(|x| x.asn)
+                                .collect::<Vec<u32>>()
+                        );
+
                         // peer-stats
                         match u32_path.get(1){
                             None => {}
                             Some(asn) => {
-                                peer_connection.entry(elem.peer_ip).or_insert(HashSet::<u32>::new()).insert(asn.clone());
+                                peer_connection.entry(elem.peer_ip).or_insert_with(HashSet::<u32>::new).insert(*asn);
                             }
                         };
 
@@ -109,7 +129,7 @@ pub fn parse_rib_file(file_url: &str, project: &str, collector: &str) -> Result<
                             None => {}
                             Some(asn) => {
                                 let prefix = elem.prefix.to_string();
-                                let count = pfx2as_map.entry((prefix, asn.clone())).or_insert(0);
+                                let count = pfx2as_map.entry((prefix, *asn)).or_insert(0);
                                 *count += 1;
                             }
                         }
@@ -248,5 +268,15 @@ mod tests {
         serde_json::to_writer_pretty(&File::create("pfx2as_example.json").unwrap(), &json!(pfx2as)).unwrap();
         serde_json::to_writer_pretty(&File::create("as2rel_example.json").unwrap(), &json!(as2rel)).unwrap();
         info!("finished");
+    }
+
+    #[test]
+    fn test_dedup() {
+        let empty: Vec<u32> = vec![];
+        assert_eq!(dedup_path(empty.clone()), empty);
+        assert_eq!(dedup_path(vec![1]), vec![1]);
+        assert_eq!(dedup_path(vec![0,1,2,3,3,3,3]), vec![0,1,2,3]);
+        assert_eq!(dedup_path(vec![0,1,2,3,3,3,3,4]), vec![0,1,2,3,4]);
+        assert_eq!(dedup_path(vec![0,1,2,3,3,3,3,4,4,4,4]), vec![0,1,2,3,4]);
     }
 }
