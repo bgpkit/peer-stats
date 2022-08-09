@@ -10,6 +10,7 @@ use serde::{Serialize, Deserialize};
 use tracing::info;
 use walkdir::{WalkDir};
 use clap::Parser;
+use anyhow::Result;
 
 pub struct PeerStatsDb {
     db: Connection,
@@ -124,13 +125,15 @@ struct Opts {
     debug: bool,
 }
 
-fn get_ymd_from_file(file_path: &str) -> (i32, u32, u32) {
+fn get_ymd_from_file(file_path: &str) -> Result<(i32, u32, u32)> {
     let date_part = file_path.split('_').collect::<Vec<&str>>();
     let parts = date_part[date_part.len()-2].split('-').collect::<Vec<&str>>();
-    (
-        parts[0].parse::<i32>().unwrap(),
-        parts[1].parse::<u32>().unwrap(),
-        parts[2].parse::<u32>().unwrap(),
+    Ok(
+        (
+        parts[0].parse::<i32>()?,
+        parts[1].parse::<u32>()?,
+        parts[2].parse::<u32>()?,
+        )
     )
 }
 
@@ -150,11 +153,15 @@ fn main(){
             match e.ok() {
                 Some(entry) => {
                     let path: String = entry.path().to_str().unwrap().to_string();
-                    if path.as_str().ends_with(".bz2") {
+                    let path_str = path.as_str();
+                    if path_str.contains("peer-stats_") && path_str.ends_with(".bz2") {
                         return if opts.bootstrap {
                             Some(path)
                         } else {
-                            let (year, month, day) = get_ymd_from_file(path.as_str());
+                            let (year, month, day) = match get_ymd_from_file(path.as_str()) {
+                                Ok(x) => {x}
+                                Err(_) => {return None}
+                            };
                             let ts = Utc::now();
                             let ts2 = ts - chrono::Duration::days(1);
 
