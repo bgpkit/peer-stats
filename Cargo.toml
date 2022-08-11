@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bgpkit-parser = "0.8.0"
+bgpkit-parser = "0.8.1"
 bgpkit-broker = "0.4"
 ipnetwork = "0.18.0"
 

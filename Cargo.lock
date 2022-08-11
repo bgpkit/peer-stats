@@ -94,9 +94,9 @@ dependencies = [
 
 [[package]]
 name = "bgpkit-parser"
-version = "0.8.0"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49a1ea4427a7ccbb0cce3cfb8e9abdee8fafdb838ab96b01a3470c81d619b0ea"
+checksum = "dd4129f8e436b8bc1f7d074c85dd4fdcdff4be7bf14306ff0d9eb5b021546bbb"
 dependencies = [
  "bgp-models",
  "chrono",
