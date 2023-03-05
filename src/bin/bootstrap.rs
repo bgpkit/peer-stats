@@ -94,6 +94,9 @@ fn main() {
         .ts_end(opts.ts_end.as_str())
         .data_type("rib")
         .page_size(10000);
+    if let Ok(url) = std::env::var("BROKER_URL") {
+        broker = broker.broker_url(url.as_str());
+    }
 
     let items: Vec<BrokerItem> = broker
         .query()
