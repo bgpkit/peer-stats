@@ -34,13 +34,13 @@ fn main() {
     if file_path.contains("routeviews") {
         project = "route-views".to_string();
         if file_path.contains("http") {
-            let parts: Vec<&str> = file_path.split("/").collect::<Vec<&str>>();
+            let parts: Vec<&str> = file_path.split('/').collect::<Vec<&str>>();
             collector = parts[3].to_string();
         }
     } else if file_path.contains("rrc") {
         project = "riperis".to_string();
         if file_path.contains("http") {
-            let parts: Vec<&str> = file_path.split("/").collect::<Vec<&str>>();
+            let parts: Vec<&str> = file_path.split('/').collect::<Vec<&str>>();
             collector = parts[3].to_string();
         }
     };

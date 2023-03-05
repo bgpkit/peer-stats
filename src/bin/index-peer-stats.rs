@@ -17,12 +17,12 @@ pub struct PeerStatsDb {
 }
 
 fn get_date_from_url(url: &str) -> (String, String, String) {
-    let parts = url.split(".").collect::<Vec<&str>>();
+    let parts = url.split('.').collect::<Vec<&str>>();
     let date_str = parts[parts.len()-3];
     let year = date_str.get(0..=3).unwrap().to_string();
     let month = date_str.get(4..=5).unwrap().to_string();
     let day = date_str.get(6..=7).unwrap().to_string();
-    return (year, month, day)
+    (year, month, day)
 }
 
 impl PeerStatsDb {
@@ -82,7 +82,7 @@ impl PeerStatsDb {
                 peer.num_connected_asns,
             )
             );
-            if !res.is_ok() {
+            if res.is_err() {
                 return false
             }
         }
@@ -214,7 +214,7 @@ mod tests {
 
     #[test]
     fn test_get_file_date() {
-        assert_eq!(get_ymd_from_file("peer-stats_rrc16_2022-02-01_1643673600.bz2"), (2022,2,1));
-        assert_eq!(get_ymd_from_file("/aaa_bbb-ccc/peer-stats_rrc16_2022-02-01_1643673600.bz2"), (2022,2,1));
+        assert_eq!(get_ymd_from_file("peer-stats_rrc16_2022-02-01_1643673600.bz2").unwrap(), (2022,2,1));
+        assert_eq!(get_ymd_from_file("/aaa_bbb-ccc/peer-stats_rrc16_2022-02-01_1643673600.bz2").unwrap(), (2022,2,1));
     }
 }
