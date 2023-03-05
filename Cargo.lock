@@ -1037,6 +1037,7 @@ dependencies = [
  "indicatif",
  "ipnetwork",
  "itertools",
+ "num_cpus",
  "oneio 0.7.2",
  "rayon",
  "rusqlite",

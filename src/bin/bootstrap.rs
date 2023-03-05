@@ -71,8 +71,25 @@ fn main() {
             .init();
     }
 
+    let num_threads = if let Ok(v) = std::env::var("MAX_THREADS") {
+        if let Ok(t) = v.parse::<usize>() {
+            t
+        } else {
+            num_cpus::get()
+        }
+    } else {
+        num_cpus::get()
+    };
+
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build_global()
+        .unwrap();
+
+    info!("using maximum {} threads for processing.", num_threads);
+
     info!("start querying broker for available RIB dump files.");
-    let broker = BgpkitBroker::new()
+    let mut broker = BgpkitBroker::new()
         .ts_start(opts.ts_start.as_str())
         .ts_end(opts.ts_end.as_str())
         .data_type("rib")
