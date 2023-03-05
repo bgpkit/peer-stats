@@ -1,16 +1,16 @@
+use anyhow::Result;
+use bzip2::read::BzDecoder;
+use chrono::{Datelike, Utc};
+use clap::Parser;
+use rusqlite::Connection;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::net::IpAddr;
 use std::path::PathBuf;
-use bzip2::read::BzDecoder;
-use chrono::{Datelike, Utc};
-use rusqlite::Connection;
-use serde::{Serialize, Deserialize};
 use tracing::info;
-use walkdir::{WalkDir};
-use clap::Parser;
-use anyhow::Result;
+use walkdir::WalkDir;
 
 pub struct PeerStatsDb {
     db: Connection,
@@ -18,7 +18,7 @@ pub struct PeerStatsDb {
 
 fn get_date_from_url(url: &str) -> (String, String, String) {
     let parts = url.split('.').collect::<Vec<&str>>();
-    let date_str = parts[parts.len()-3];
+    let date_str = parts[parts.len() - 3];
     let year = date_str.get(0..=3).unwrap().to_string();
     let month = date_str.get(4..=5).unwrap().to_string();
     let day = date_str.get(6..=7).unwrap().to_string();
@@ -28,15 +28,12 @@ fn get_date_from_url(url: &str) -> (String, String, String) {
 impl PeerStatsDb {
     pub fn new(db_path: &Option<String>) -> PeerStatsDb {
         let db = match db_path {
-            Some(p) => {
-                Connection::open(p.as_str()).unwrap()
-            }
-            None => {
-                Connection::open_in_memory().unwrap()
-            }
+            Some(p) => Connection::open(p.as_str()).unwrap(),
+            None => Connection::open_in_memory().unwrap(),
         };
 
-        db.execute(r#"
+        db.execute(
+            r#"
         create table if not exists peer_stats (
         date TEXT ,
         collector TEXT,
@@ -47,21 +44,29 @@ impl PeerStatsDb {
         num_connected_asns INTEGER,
         PRIMARY KEY (date, collector, ip)
         );
-        "#, []).unwrap();
+        "#,
+            [],
+        )
+        .unwrap();
 
-        db.execute(r#"
+        db.execute(
+            r#"
         create index if not exists date_index on peer_stats (
         date DESC
         );
-        "#, []).unwrap();
+        "#,
+            [],
+        )
+        .unwrap();
 
         PeerStatsDb { db }
     }
 
     pub fn is_db_empty(&self) -> bool {
-        let count: u32 = self.db.query_row("select count(*) from peer_stats", [],
-                                           |row| row.get(0),
-        ).unwrap();
+        let count: u32 = self
+            .db
+            .query_row("select count(*) from peer_stats", [], |row| row.get(0))
+            .unwrap();
         count == 0
     }
 
@@ -83,7 +88,7 @@ impl PeerStatsDb {
             )
             );
             if res.is_err() {
-                return false
+                return false;
             }
         }
         true
@@ -127,21 +132,23 @@ struct Opts {
 
 fn get_ymd_from_file(file_path: &str) -> Result<(i32, u32, u32)> {
     let date_part = file_path.split('_').collect::<Vec<&str>>();
-    let parts = date_part[date_part.len()-2].split('-').collect::<Vec<&str>>();
-    Ok(
-        (
+    let parts = date_part[date_part.len() - 2]
+        .split('-')
+        .collect::<Vec<&str>>();
+    Ok((
         parts[0].parse::<i32>()?,
         parts[1].parse::<u32>()?,
         parts[2].parse::<u32>()?,
-        )
-    )
+    ))
 }
 
-fn main(){
+fn main() {
     let opts = Opts::parse();
 
     if opts.debug {
-        tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).init();
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::INFO)
+            .init();
     }
 
     let db = PeerStatsDb::new(&Some(opts.db_file.to_str().unwrap().to_string()));
@@ -149,50 +156,48 @@ fn main(){
     let file_paths = WalkDir::new(opts.data_dir.to_str().unwrap())
         .follow_links(true)
         .into_iter()
-        .filter_map(|e| {
-            match e.ok() {
-                Some(entry) => {
-                    let path: String = entry.path().to_str().unwrap().to_string();
-                    let path_str = path.as_str();
-                    if path_str.contains("peer-stats_") && path_str.ends_with(".bz2") {
-                        return if opts.bootstrap {
+        .filter_map(|e| match e.ok() {
+            Some(entry) => {
+                let path: String = entry.path().to_str().unwrap().to_string();
+                let path_str = path.as_str();
+                if path_str.contains("peer-stats_") && path_str.ends_with(".bz2") {
+                    return if opts.bootstrap {
+                        Some(path)
+                    } else {
+                        let (year, month, day) = match get_ymd_from_file(path.as_str()) {
+                            Ok(x) => x,
+                            Err(_) => return None,
+                        };
+                        let ts = Utc::now();
+                        let ts2 = ts - chrono::Duration::days(1);
+
+                        let expected_dates = match ts.month() == ts2.month() {
+                            true => {
+                                vec![(ts.year(), ts.month(), ts.day())]
+                            }
+                            false => {
+                                vec![
+                                    (ts.year(), ts.month(), ts.day()),
+                                    (ts2.year(), ts2.month(), ts2.day()),
+                                ]
+                            }
+                        };
+
+                        if expected_dates
+                            .into_iter()
+                            .any(|(y, m, d)| y == year && m == month && d == day)
+                        {
                             Some(path)
                         } else {
-                            let (year, month, day) = match get_ymd_from_file(path.as_str()) {
-                                Ok(x) => {x}
-                                Err(_) => {return None}
-                            };
-                            let ts = Utc::now();
-                            let ts2 = ts - chrono::Duration::days(1);
-
-                            let expected_dates = match ts.month() == ts2.month() {
-                                true => {
-                                    vec![
-                                        (ts.year(), ts.month(), ts.day())
-                                    ]
-                                }
-                                false => {
-                                    vec![
-                                        (ts.year(), ts.month(), ts.day()),
-                                        (ts2.year(), ts2.month(), ts2.day()),
-                                    ]
-                                }
-                            };
-
-                            if expected_dates.into_iter().any(|(y, m, d)| {
-                                y == year && m == month && d == day
-                            }) {
-                                Some(path)
-                            } else {
-                                None
-                            }
+                            None
                         }
-                    }
-                    None
+                    };
                 }
-                None => {None}
+                None
             }
-        }).collect::<Vec<String>>();
+            None => None,
+        })
+        .collect::<Vec<String>>();
 
     for file in file_paths {
         info!("processing {}", file.as_str());
@@ -214,7 +219,13 @@ mod tests {
 
     #[test]
     fn test_get_file_date() {
-        assert_eq!(get_ymd_from_file("peer-stats_rrc16_2022-02-01_1643673600.bz2").unwrap(), (2022,2,1));
-        assert_eq!(get_ymd_from_file("/aaa_bbb-ccc/peer-stats_rrc16_2022-02-01_1643673600.bz2").unwrap(), (2022,2,1));
+        assert_eq!(
+            get_ymd_from_file("peer-stats_rrc16_2022-02-01_1643673600.bz2").unwrap(),
+            (2022, 2, 1)
+        );
+        assert_eq!(
+            get_ymd_from_file("/aaa_bbb-ccc/peer-stats_rrc16_2022-02-01_1643673600.bz2").unwrap(),
+            (2022, 2, 1)
+        );
     }
 }

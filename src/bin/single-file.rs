@@ -1,8 +1,8 @@
-use std::path::PathBuf;
-use serde_json::json;
-use tracing::{info, Level};
-use peer_stats::parse_rib_file;
 use clap::Parser;
+use peer_stats::parse_rib_file;
+use serde_json::json;
+use std::path::PathBuf;
+use tracing::{info, Level};
 
 /// peer-stats is a CLI tool that collects peer information from a given RIB dump file.
 #[derive(Parser, Debug)]
@@ -45,9 +45,12 @@ fn main() {
         }
     };
 
-    let (peer_stats, _pfx2as, _as2rel) = parse_rib_file(file_path,
-                              project.as_str(), collector.as_str()).unwrap();
+    let (peer_stats, _pfx2as, _as2rel) =
+        parse_rib_file(file_path, project.as_str(), collector.as_str()).unwrap();
 
-    println!("{}", serde_json::to_string_pretty(&json!(peer_stats)).unwrap());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&json!(peer_stats)).unwrap()
+    );
     info!("finished");
 }

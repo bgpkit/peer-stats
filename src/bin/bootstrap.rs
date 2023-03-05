@@ -1,23 +1,23 @@
-use std::{fs, thread};
+use bgpkit_broker::{BgpkitBroker, BrokerItem};
+use bzip2::write::BzEncoder;
+use bzip2::Compression;
+use chrono::{Datelike, Timelike};
+use clap::Parser;
+use indicatif::{ProgressBar, ProgressStyle};
+use peer_stats::parse_rib_file;
+use rayon::prelude::*;
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::sync::mpsc::channel;
-use serde_json::{json, Value};
+use std::{fs, thread};
 use tracing::{error, info, Level};
-use peer_stats::parse_rib_file;
-use bgpkit_broker::{BgpkitBroker, BrokerItem};
-use bzip2::Compression;
-use bzip2::write::BzEncoder;
-use chrono::{Datelike, Timelike};
-use indicatif::{ProgressBar, ProgressStyle};
-use rayon::prelude::*;
-use clap::Parser;
 
 /// peer-stats is a CLI tool that collects peer information from a given RIB dump file.
 #[derive(Parser, Debug)]
-#[structopt(name="peer-stats")]
+#[structopt(name = "peer-stats")]
 struct Opts {
     /// whether to print debug
     #[clap(long)]
@@ -55,10 +55,7 @@ fn write_results(output_path: &str, data: &Value) {
     };
 
     let compressor = BzEncoder::new(file, Compression::best());
-    let mut writer = BufWriter::with_capacity(
-        128 * 1024,
-        compressor,
-    );
+    let mut writer = BufWriter::with_capacity(128 * 1024, compressor);
 
     let _ = writer.write_all(serde_json::to_string_pretty(data).unwrap().as_ref());
 }
@@ -81,21 +78,25 @@ fn main() {
         .data_type("rib")
         .page_size(10000);
 
-    let items: Vec<BrokerItem> = broker.query().unwrap().into_iter().filter( |item| {
-        if !opts.only_daily {
-            return true
-        }
-        // only process the first one per-day
-        item.ts_start.hour() == 0
-    }
-    ).collect();
+    let items: Vec<BrokerItem> = broker
+        .query()
+        .unwrap()
+        .into_iter()
+        .filter(|item| {
+            if !opts.only_daily {
+                return true;
+            }
+            // only process the first one per-day
+            item.ts_start.hour() == 0
+        })
+        .collect();
     let total_items = items.len();
 
     if opts.dry_run {
         info!("total of {total_items} RIB dump files to process");
         info!("first RIB is {}", items.first().unwrap().url);
         info!("last RIB is {}", items.last().unwrap().url);
-        return
+        return;
     }
 
     let (sender_pb, receiver_pb) = channel::<String>();
@@ -123,37 +124,69 @@ fn main() {
 
         let mut file_path_map: HashMap<String, String> = HashMap::new();
         for data_type in data_types {
-            let file_dir = format!("{}/{}/{}/{:02}/{:02}", output_dir, data_type, &item.collector_id, ts.year(), ts.month());
+            let file_dir = format!(
+                "{}/{}/{}/{:02}/{:02}",
+                output_dir,
+                data_type,
+                &item.collector_id,
+                ts.year(),
+                ts.month()
+            );
             fs::create_dir_all(file_dir.as_str()).unwrap();
-            let output_path = format!("{}/{}_{}_{}-{:02}-{:02}_{}.bz2", &file_dir, data_type, &item.collector_id, ts.year(), ts.month(), ts.day(), &timestamp);
+            let output_path = format!(
+                "{}/{}_{}_{}-{:02}-{:02}_{}.bz2",
+                &file_dir,
+                data_type,
+                &item.collector_id,
+                ts.year(),
+                ts.month(),
+                ts.day(),
+                &timestamp
+            );
             if !opts.force && std::path::Path::new(output_path.as_str()).exists() {
-                info!("result file {} already exists, skip processing", output_path);
+                info!(
+                    "result file {} already exists, skip processing",
+                    output_path
+                );
                 let _ = s1.send(format!("{}-{}", item.collector_id.as_str(), timestamp));
-                return
+                return;
             }
             file_path_map.insert(data_type.to_string(), output_path);
         }
 
-        let project = match item.collector_id.starts_with("rrc"){
+        let project = match item.collector_id.starts_with("rrc") {
             true => "riperis".to_string(),
-            false => "route-views".to_string()
+            false => "route-views".to_string(),
         };
 
         // parsing and writing out info, manually scoping to potentially avoid memory issue
         {
             info!("start parsing file {}", item.url.as_str());
-            let (peer_stats, pfx2as, as2rel) = match parse_rib_file(item.url.as_str(), project.as_str(), item.collector_id.as_str()){
-                Ok(i) => {i}
+            let (peer_stats, pfx2as, as2rel) = match parse_rib_file(
+                item.url.as_str(),
+                project.as_str(),
+                item.collector_id.as_str(),
+            ) {
+                Ok(i) => i,
                 Err(_) => {
                     error!("processing of file {} failed", item.url.as_str());
                     let _ = s1.send(format!("{}-{}", item.collector_id.as_str(), timestamp));
-                    return
+                    return;
                 }
             };
 
-            write_results(file_path_map.get("peer-stats").unwrap().as_str(), &json!(peer_stats));
-            write_results(file_path_map.get("pfx2as").unwrap().as_str(), &json!(pfx2as));
-            write_results(file_path_map.get("as2rel").unwrap().as_str(), &json!(as2rel));
+            write_results(
+                file_path_map.get("peer-stats").unwrap().as_str(),
+                &json!(peer_stats),
+            );
+            write_results(
+                file_path_map.get("pfx2as").unwrap().as_str(),
+                &json!(pfx2as),
+            );
+            write_results(
+                file_path_map.get("as2rel").unwrap().as_str(),
+                &json!(as2rel),
+            );
         }
 
         let _ = s1.send(format!("{}-{}", item.collector_id.as_str(), timestamp));
