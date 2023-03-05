@@ -56,6 +56,8 @@ peer-stats --debug http://archive.routeviews.org/route-views.sg/bgpdata/2022.02/
 
 ### Historical Data Bootstrap
 
+Use `MAX_THREADS` environment variable to configure maximum number of threads to use for processing.
+
 ```text
 peer-stats 0.1.0
 peer-stats is a CLI tool that collects peer information from a given RIB dump file

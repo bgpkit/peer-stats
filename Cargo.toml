@@ -30,6 +30,8 @@ anyhow = "1.0"
 chrono = "0.4.19"
 
 itertools = "0.10"
+num_cpus = "1"
+
 
 [[bin]]
 name = "peer-stats-single-file"
