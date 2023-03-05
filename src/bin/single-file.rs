@@ -1,8 +1,8 @@
-use std::path::PathBuf;
-use serde_json::json;
-use tracing::{info, Level};
-use peer_stats::parse_rib_file;
 use clap::Parser;
+use peer_stats::parse_rib_file;
+use serde_json::json;
+use std::path::PathBuf;
+use tracing::{info, Level};
 
 /// peer-stats is a CLI tool that collects peer information from a given RIB dump file.
 #[derive(Parser, Debug)]
@@ -16,7 +16,7 @@ struct Opts {
 }
 
 fn main() {
-    let opts: Opts = Opts::from_args();
+    let opts: Opts = Opts::parse();
 
     if opts.debug {
         tracing_subscriber::fmt()
@@ -34,20 +34,23 @@ fn main() {
     if file_path.contains("routeviews") {
         project = "route-views".to_string();
         if file_path.contains("http") {
-            let parts: Vec<&str> = file_path.split("/").collect::<Vec<&str>>();
+            let parts: Vec<&str> = file_path.split('/').collect::<Vec<&str>>();
             collector = parts[3].to_string();
         }
     } else if file_path.contains("rrc") {
         project = "riperis".to_string();
         if file_path.contains("http") {
-            let parts: Vec<&str> = file_path.split("/").collect::<Vec<&str>>();
+            let parts: Vec<&str> = file_path.split('/').collect::<Vec<&str>>();
             collector = parts[3].to_string();
         }
     };
 
-    let (peer_stats, _pfx2as, _as2rel) = parse_rib_file(file_path,
-                              project.as_str(), collector.as_str()).unwrap();
+    let (peer_stats, _pfx2as, _as2rel) =
+        parse_rib_file(file_path, project.as_str(), collector.as_str()).unwrap();
 
-    println!("{}", serde_json::to_string_pretty(&json!(peer_stats)).unwrap());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&json!(peer_stats)).unwrap()
+    );
     info!("finished");
 }

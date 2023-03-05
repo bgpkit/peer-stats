@@ -1,11 +1,11 @@
 #![allow(dead_code)]
+use anyhow::Result;
 use bgpkit_parser::{AsPathSegment, BgpkitParser};
+use ipnetwork::IpNetwork;
+use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
-use ipnetwork::IpNetwork;
-use serde::{Serialize, Deserialize};
-use anyhow::Result;
-use itertools::Itertools;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct RibPeerInfo {
@@ -40,7 +40,6 @@ pub struct Prefix2AsCount {
     pub count: usize,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct As2Rel {
     pub project: String,
@@ -62,17 +61,20 @@ pub struct As2RelCount {
     pub peers_count: usize,
 }
 
-const TIER1: [u32; 17] = [ 6762, 12956, 2914, 3356, 6453, 1239, 701 , 6461, 3257, 1299, 3491, 7018, 3320, 5511, 6830, 174 , 6939, ];
+const TIER1: [u32; 17] = [
+    6762, 12956, 2914, 3356, 6453, 1239, 701, 6461, 3257, 1299, 3491, 7018, 3320, 5511, 6830, 174,
+    6939,
+];
 
 fn dedup_path(path: Vec<u32>) -> Vec<u32> {
-    if path.len()<=1 {
-        return path
+    if path.len() <= 1 {
+        return path;
     }
 
     let mut new_path = vec![path[0]];
 
     for (asn1, asn2) in path.into_iter().tuple_windows::<(u32, u32)>() {
-        if asn1!=asn2 {
+        if asn1 != asn2 {
             new_path.push(asn2)
         }
     }
@@ -89,8 +91,11 @@ fn dedup_path(path: Vec<u32>) -> Vec<u32> {
 /// - `peer_asn`
 /// - `num_v4_pfxs`
 /// - `num_v6_pfxs`
-pub fn parse_rib_file(file_url: &str, project: &str, collector: &str) -> Result<(RibPeerInfo, Prefix2As, As2Rel) > {
-
+pub fn parse_rib_file(
+    file_url: &str,
+    project: &str,
+    collector: &str,
+) -> Result<(RibPeerInfo, Prefix2As, As2Rel)> {
     // peer-stats
     let mut peer_asn_map: HashMap<IpAddr, u32> = HashMap::new();
     let mut peer_connection: HashMap<IpAddr, HashSet<u32>> = HashMap::new();
@@ -104,23 +109,24 @@ pub fn parse_rib_file(file_url: &str, project: &str, collector: &str) -> Result<
     let mut as2rel_map: HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)> = HashMap::new();
 
     for (_elem_count, elem) in (BgpkitParser::new(file_url)?).into_iter().enumerate() {
-
-        peer_asn_map.entry(elem.peer_ip).or_insert(elem.peer_asn.asn);
+        peer_asn_map
+            .entry(elem.peer_ip)
+            .or_insert(elem.peer_asn.asn);
         if let Some(as_path) = elem.as_path.clone() {
             match as_path.clone().segments.get(0) {
                 Some(path) => {
                     if let AsPathSegment::AsSequence(a) = path {
-                        let mut u32_path = dedup_path(
-                            a.iter()
-                                .map(|x| x.asn)
-                                .collect::<Vec<u32>>()
-                        );
+                        let mut u32_path =
+                            dedup_path(a.iter().map(|x| x.asn).collect::<Vec<u32>>());
 
                         // peer-stats
-                        match u32_path.get(1){
+                        match u32_path.get(1) {
                             None => {}
                             Some(asn) => {
-                                peer_connection.entry(elem.peer_ip).or_insert_with(HashSet::<u32>::new).insert(*asn);
+                                peer_connection
+                                    .entry(elem.peer_ip)
+                                    .or_insert_with(HashSet::<u32>::new)
+                                    .insert(*asn);
                             }
                         };
 
@@ -135,8 +141,10 @@ pub fn parse_rib_file(file_url: &str, project: &str, collector: &str) -> Result<
                         }
 
                         // counting peer relationships
-                        for (asn1, asn2) in u32_path.iter().tuple_windows::<(&u32, &u32)>(){
-                            let (msg_count, peers) = as2rel_map.entry((*asn1, *asn2, 0)).or_insert((0, HashSet::new()));
+                        for (asn1, asn2) in u32_path.iter().tuple_windows::<(&u32, &u32)>() {
+                            let (msg_count, peers) = as2rel_map
+                                .entry((*asn1, *asn2, 0))
+                                .or_insert((0, HashSet::new()));
                             *msg_count += 1;
                             peers.insert(elem.peer_ip);
                         }
@@ -149,15 +157,18 @@ pub fn parse_rib_file(file_url: &str, project: &str, collector: &str) -> Result<
                             for (i, asn) in u32_path.iter().enumerate() {
                                 if TIER1.contains(asn) && first_tier1 == usize::MAX {
                                     first_tier1 = i;
-                                    break
+                                    break;
                                 }
                             }
 
                             // origin to first tier 1
-                            if first_tier1<u32_path.len()-1{
+                            if first_tier1 < u32_path.len() - 1 {
                                 for i in 0..first_tier1 {
-                                    let (asn1, asn2) = (u32_path.get(i).unwrap(), u32_path.get(i+1).unwrap());
-                                    let (msg_count, peers) = as2rel_map.entry((*asn2, *asn1, 1)).or_insert((0, HashSet::new()));
+                                    let (asn1, asn2) =
+                                        (u32_path.get(i).unwrap(), u32_path.get(i + 1).unwrap());
+                                    let (msg_count, peers) = as2rel_map
+                                        .entry((*asn2, *asn1, 1))
+                                        .or_insert((0, HashSet::new()));
                                     *msg_count += 1;
                                     peers.insert(elem.peer_ip);
                                 }
@@ -174,12 +185,14 @@ pub fn parse_rib_file(file_url: &str, project: &str, collector: &str) -> Result<
 
         match elem.prefix.prefix.is_ipv4() {
             true => {
-                peer_v4_pfxs_map.entry(elem.peer_ip)
+                peer_v4_pfxs_map
+                    .entry(elem.peer_ip)
                     .or_insert_with(HashSet::<IpNetwork>::new)
                     .insert(elem.prefix.prefix);
             }
             false => {
-                peer_v6_pfxs_map.entry(elem.peer_ip)
+                peer_v6_pfxs_map
+                    .entry(elem.peer_ip)
                     .or_insert_with(HashSet::<IpNetwork>::new)
                     .insert(elem.prefix.prefix);
             }
@@ -196,64 +209,60 @@ pub fn parse_rib_file(file_url: &str, project: &str, collector: &str) -> Result<
         let asn_clone = asn;
         peer_info_map.insert(
             ip_clone,
-            PeerInfo{
+            PeerInfo {
                 ip: ip_clone,
                 asn: asn_clone,
                 num_v4_pfxs,
                 num_v6_pfxs,
                 num_connected_asns: num_connected_asn,
-            }
+            },
         );
     }
 
-    let pfx2as = pfx2as_map.into_iter().map(|((prefix, asn), count)|{
-        Prefix2AsCount {
-            prefix,
-            asn,
-            count
-        }
-    }).collect();
+    let pfx2as = pfx2as_map
+        .into_iter()
+        .map(|((prefix, asn), count)| Prefix2AsCount { prefix, asn, count })
+        .collect();
 
-    let as2rel = as2rel_map.into_iter().map(|((asn1, asn2, rel), (msg_count, peers))| {
-        As2RelCount{
+    let as2rel = as2rel_map
+        .into_iter()
+        .map(|((asn1, asn2, rel), (msg_count, peers))| As2RelCount {
             asn1,
             asn2,
             rel,
             paths_count: msg_count,
             peers_count: peers.len(),
-        }
-    }).collect();
+        })
+        .collect();
 
-    Ok(
-        (
-            RibPeerInfo {
+    Ok((
+        RibPeerInfo {
             project: project.to_string(),
             collector: collector.to_string(),
             rib_dump_url: file_url.to_string(),
-            peers: peer_info_map
-            },
-            Prefix2As {
-                project: project.to_string(),
-                collector: collector.to_string(),
-                rib_dump_url: file_url.to_string(),
-                pfx2as,
-            },
-            As2Rel {
-                project: project.to_string(),
-                collector: collector.to_string(),
-                rib_dump_url: file_url.to_string(),
-                as2rel
-            }
-        )
-    )
+            peers: peer_info_map,
+        },
+        Prefix2As {
+            project: project.to_string(),
+            collector: collector.to_string(),
+            rib_dump_url: file_url.to_string(),
+            pfx2as,
+        },
+        As2Rel {
+            project: project.to_string(),
+            collector: collector.to_string(),
+            rib_dump_url: file_url.to_string(),
+            as2rel,
+        },
+    ))
 }
 
 #[cfg(test)]
 mod tests {
-    use std::fs::File;
-    use serde_json::json;
-    use tracing::{info, Level};
     use super::*;
+    use serde_json::json;
+    use std::fs::File;
+    use tracing::{info, Level};
 
     #[test]
     fn test_read_rib() {
@@ -264,9 +273,21 @@ mod tests {
         info!("start");
         let (peer_stats, pfx2as, as2rel) = parse_rib_file("http://archive.routeviews.org/route-views.soxrs/bgpdata/2022.08/RIBS/rib.20220808.1400.bz2",
         "route-views", "route-views.sg").unwrap();
-        serde_json::to_writer_pretty(&File::create("peer_info_example.json").unwrap(), &json!(peer_stats)).unwrap();
-        serde_json::to_writer_pretty(&File::create("pfx2as_example.json").unwrap(), &json!(pfx2as)).unwrap();
-        serde_json::to_writer_pretty(&File::create("as2rel_example.json").unwrap(), &json!(as2rel)).unwrap();
+        serde_json::to_writer_pretty(
+            &File::create("peer_info_example.json").unwrap(),
+            &json!(peer_stats),
+        )
+        .unwrap();
+        serde_json::to_writer_pretty(
+            &File::create("pfx2as_example.json").unwrap(),
+            &json!(pfx2as),
+        )
+        .unwrap();
+        serde_json::to_writer_pretty(
+            &File::create("as2rel_example.json").unwrap(),
+            &json!(as2rel),
+        )
+        .unwrap();
         info!("finished");
     }
 
@@ -275,8 +296,14 @@ mod tests {
         let empty: Vec<u32> = vec![];
         assert_eq!(dedup_path(empty.clone()), empty);
         assert_eq!(dedup_path(vec![1]), vec![1]);
-        assert_eq!(dedup_path(vec![0,1,2,3,3,3,3]), vec![0,1,2,3]);
-        assert_eq!(dedup_path(vec![0,1,2,3,3,3,3,4]), vec![0,1,2,3,4]);
-        assert_eq!(dedup_path(vec![0,1,2,3,3,3,3,4,4,4,4]), vec![0,1,2,3,4]);
+        assert_eq!(dedup_path(vec![0, 1, 2, 3, 3, 3, 3]), vec![0, 1, 2, 3]);
+        assert_eq!(
+            dedup_path(vec![0, 1, 2, 3, 3, 3, 3, 4]),
+            vec![0, 1, 2, 3, 4]
+        );
+        assert_eq!(
+            dedup_path(vec![0, 1, 2, 3, 3, 3, 3, 4, 4, 4, 4]),
+            vec![0, 1, 2, 3, 4]
+        );
     }
 }
