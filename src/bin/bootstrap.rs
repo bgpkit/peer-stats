@@ -7,7 +7,7 @@ use std::sync::mpsc::channel;
 use serde_json::{json, Value};
 use tracing::{error, info, Level};
 use peer_stats::parse_rib_file;
-use bgpkit_broker::{BgpkitBroker, BrokerItem, QueryParams};
+use bgpkit_broker::{BgpkitBroker, BrokerItem};
 use bzip2::Compression;
 use bzip2::write::BzEncoder;
 use chrono::{Datelike, Timelike};
@@ -75,14 +75,13 @@ fn main() {
     }
 
     info!("start querying broker for available RIB dump files.");
-    let broker = BgpkitBroker::new_with_params("https://api.broker.bgpkit.com/v2", QueryParams{
-        ts_start: Some(opts.ts_start),
-        ts_end: Some(opts.ts_end),
-        data_type: Some("rib".to_string()),
-        page_size: 10000,
-        ..Default::default()
-    });
-    let items: Vec<BrokerItem> = broker.into_iter().filter( |item| {
+    let broker = BgpkitBroker::new()
+        .ts_start(opts.ts_start.as_str())
+        .ts_end(opts.ts_end.as_str())
+        .data_type("rib")
+        .page_size(10000);
+
+    let items: Vec<BrokerItem> = broker.query().unwrap().into_iter().filter( |item| {
         if !opts.only_daily {
             return true
         }

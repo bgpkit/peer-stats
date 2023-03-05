@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 bgpkit-parser = "0.8.1"
-bgpkit-broker = "0.4"
+bgpkit-broker = "0.5.1"
 ipnetwork = "0.18.0"
 
 serde = {version="1", features=["derive"]}
@@ -20,8 +20,8 @@ indicatif = "0.15"
 
 rayon = "1.5.1"
 bzip2 = "0.4.3"
-clap = { version = "3.2.8", features = ["derive"] }
-oneio = {version ="0.3.0", features = ["lib_only"]}
+clap = { version = "4.1.8", features = ["derive"] }
+oneio = {version = "0.7.2", features = ["lib_only"]}
 
 walkdir = "2.3.2"
 rusqlite = { version = "0.28.0", features = ["bundled"] }

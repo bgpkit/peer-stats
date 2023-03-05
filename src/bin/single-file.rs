@@ -16,7 +16,7 @@ struct Opts {
 }
 
 fn main() {
-    let opts: Opts = Opts::from_args();
+    let opts: Opts = Opts::parse();
 
     if opts.debug {
         tracing_subscriber::fmt()
