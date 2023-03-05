@@ -1,2 +1,5 @@
 /target
 venv
+
+.idea
+*.bz2
