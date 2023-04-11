@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 use anyhow::Result;
-use bgpkit_parser::{AsPathSegment, BgpkitParser};
-use ipnetwork::IpNetwork;
+use bgpkit_parser::models::AsPathSegment;
+use bgpkit_parser::BgpkitParser;
+use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -99,8 +100,8 @@ pub fn parse_rib_file(
     // peer-stats
     let mut peer_asn_map: HashMap<IpAddr, u32> = HashMap::new();
     let mut peer_connection: HashMap<IpAddr, HashSet<u32>> = HashMap::new();
-    let mut peer_v4_pfxs_map: HashMap<IpAddr, HashSet<IpNetwork>> = HashMap::new();
-    let mut peer_v6_pfxs_map: HashMap<IpAddr, HashSet<IpNetwork>> = HashMap::new();
+    let mut peer_v4_pfxs_map: HashMap<IpAddr, HashSet<Ipv4Net>> = HashMap::new();
+    let mut peer_v6_pfxs_map: HashMap<IpAddr, HashSet<Ipv6Net>> = HashMap::new();
 
     // pfx2as
     let mut pfx2as_map: HashMap<(String, u32), usize> = HashMap::new();
@@ -183,18 +184,18 @@ pub fn parse_rib_file(
             };
         }
 
-        match elem.prefix.prefix.is_ipv4() {
-            true => {
+        match elem.prefix.prefix {
+            IpNet::V4(net) => {
                 peer_v4_pfxs_map
                     .entry(elem.peer_ip)
-                    .or_insert_with(HashSet::<IpNetwork>::new)
-                    .insert(elem.prefix.prefix);
+                    .or_insert_with(HashSet::<Ipv4Net>::new)
+                    .insert(net);
             }
-            false => {
+            IpNet::V6(net) => {
                 peer_v6_pfxs_map
                     .entry(elem.peer_ip)
-                    .or_insert_with(HashSet::<IpNetwork>::new)
-                    .insert(elem.prefix.prefix);
+                    .or_insert_with(HashSet::<Ipv6Net>::new)
+                    .insert(net);
             }
         }
         drop(elem);
