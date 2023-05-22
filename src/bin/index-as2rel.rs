@@ -1,4 +1,4 @@
-use chrono::{Datelike, Utc};
+use chrono::{NaiveDate, Utc};
 use clap::Parser;
 use peer_stats::{As2Rel, As2RelCount};
 use serde_json::json;
@@ -20,6 +20,9 @@ struct Opts {
     /// whether to print debug
     #[clap(long)]
     debug: bool,
+
+    #[clap(long)]
+    allow_previous_day: bool,
 }
 
 fn get_ymd_from_file(file_path: &str) -> (i32, u32, u32) {
@@ -52,8 +55,12 @@ fn main() {
                 let path_str = path.as_str();
                 if path_str.contains("as2rel_") && path_str.ends_with(".bz2") {
                     let (year, month, day) = get_ymd_from_file(path.as_str());
-                    let ts = Utc::now();
-                    if ts.year() == year && ts.month() == month && ts.day() == day {
+                    let file_date = NaiveDate::from_ymd_opt(year, month, day).unwrap();
+                    let ts = Utc::now().date().naive_utc();
+                    if file_date == ts {
+                        return Some(path);
+                    }
+                    if opts.allow_previous_day && file_date == ts.pred() {
                         return Some(path);
                     }
                 }

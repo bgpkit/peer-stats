@@ -1,4 +1,4 @@
-use chrono::{Datelike, NaiveDate, Utc};
+use chrono::{NaiveDate, Utc};
 use clap::Parser;
 use peer_stats::{Prefix2As, Prefix2AsCount};
 use serde_json::json;
