@@ -63,6 +63,10 @@ fn main() {
         })
         .collect::<Vec<String>>();
 
+    if file_paths.is_empty() {
+        info!("no matching current date as2rel file found, skipping");
+    }
+
     let mut data_map: HashMap<(u32, u32, u8), (usize, usize)> = HashMap::new();
 
     for file in file_paths {
