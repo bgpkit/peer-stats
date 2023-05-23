@@ -72,6 +72,7 @@ fn main() {
 
     if file_paths.is_empty() {
         info!("no matching current date as2rel file found, skipping");
+        return;
     }
 
     let mut data_map: HashMap<(u32, u32, u8), (usize, usize)> = HashMap::new();
