@@ -21,7 +21,7 @@ indicatif = "0.15"
 rayon = "1.5.1"
 bzip2 = "0.4.3"
 clap = { version = "4.1.8", features = ["derive"] }
-oneio = {version = "0.8.1", features = ["lib_only"]}
+oneio = "0.14.0"
 
 walkdir = "2.3.2"
 rusqlite = { version = "0.29.0", features = ["bundled"] }
@@ -29,7 +29,7 @@ rusqlite = { version = "0.29.0", features = ["bundled"] }
 anyhow = "1.0"
 chrono = "0.4.19"
 
-itertools = "0.10"
+itertools = "0.12.0"
 num_cpus = "1"
 
 
