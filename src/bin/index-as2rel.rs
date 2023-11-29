@@ -56,11 +56,11 @@ fn main() {
                 if path_str.contains("as2rel_") && path_str.ends_with(".bz2") {
                     let (year, month, day) = get_ymd_from_file(path.as_str());
                     let file_date = NaiveDate::from_ymd_opt(year, month, day).unwrap();
-                    let ts = Utc::now().date().naive_utc();
+                    let ts = Utc::now().date_naive();
                     if file_date == ts {
                         return Some(path);
                     }
-                    if opts.allow_previous_day && file_date == ts.pred() {
+                    if opts.allow_previous_day && file_date == ts.pred_opt().unwrap() {
                         return Some(path);
                     }
                 }

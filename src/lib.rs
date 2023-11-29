@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 use anyhow::Result;
-use bgpkit_parser::models::AsPathSegment;
 use bgpkit_parser::BgpkitParser;
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use itertools::Itertools;
@@ -114,87 +113,78 @@ pub fn parse_rib_file(
             .entry(elem.peer_ip)
             .or_insert(elem.peer_asn.asn);
         if let Some(as_path) = elem.as_path.clone() {
-            match as_path.clone().segments.get(0) {
-                Some(path) => {
-                    if let AsPathSegment::AsSequence(a) = path {
-                        let mut u32_path =
-                            dedup_path(a.iter().map(|x| x.asn).collect::<Vec<u32>>());
+            if let Some(mut u32_path) = as_path.to_u32_vec() {
+                u32_path.dedup();
 
-                        // peer-stats
-                        match u32_path.get(1) {
-                            None => {}
-                            Some(asn) => {
-                                peer_connection
-                                    .entry(elem.peer_ip)
-                                    .or_insert_with(HashSet::<u32>::new)
-                                    .insert(*asn);
-                            }
-                        };
+                // peer-stats
+                match u32_path.get(1) {
+                    None => {}
+                    Some(asn) => {
+                        peer_connection
+                            .entry(elem.peer_ip)
+                            .or_default()
+                            .insert(*asn);
+                    }
+                };
 
-                        // pfx2as
-                        match u32_path.last() {
-                            None => {}
-                            Some(asn) => {
-                                let prefix = elem.prefix.to_string();
-                                let count = pfx2as_map.entry((prefix, *asn)).or_insert(0);
-                                *count += 1;
-                            }
+                // pfx2as
+                match u32_path.last() {
+                    None => {}
+                    Some(asn) => {
+                        let prefix = elem.prefix.to_string();
+                        let count = pfx2as_map.entry((prefix, *asn)).or_insert(0);
+                        *count += 1;
+                    }
+                }
+
+                // counting peer relationships
+                for (asn1, asn2) in u32_path.iter().tuple_windows::<(&u32, &u32)>() {
+                    let (msg_count, peers) = as2rel_map
+                        .entry((*asn1, *asn2, 0))
+                        .or_insert((0, HashSet::new()));
+                    *msg_count += 1;
+                    peers.insert(elem.peer_ip);
+                }
+
+                let contains_tier1 = u32_path.iter().any(|x| TIER1.contains(x));
+
+                u32_path.reverse();
+                if contains_tier1 {
+                    let mut first_tier1: usize = usize::MAX;
+                    for (i, asn) in u32_path.iter().enumerate() {
+                        if TIER1.contains(asn) && first_tier1 == usize::MAX {
+                            first_tier1 = i;
+                            break;
                         }
+                    }
 
-                        // counting peer relationships
-                        for (asn1, asn2) in u32_path.iter().tuple_windows::<(&u32, &u32)>() {
+                    // origin to first tier 1
+                    if first_tier1 < u32_path.len() - 1 {
+                        for i in 0..first_tier1 {
+                            let (asn1, asn2) =
+                                (u32_path.get(i).unwrap(), u32_path.get(i + 1).unwrap());
                             let (msg_count, peers) = as2rel_map
-                                .entry((*asn1, *asn2, 0))
+                                .entry((*asn2, *asn1, 1))
                                 .or_insert((0, HashSet::new()));
                             *msg_count += 1;
                             peers.insert(elem.peer_ip);
                         }
-
-                        let contains_tier1 = u32_path.iter().any(|x| TIER1.contains(x));
-
-                        u32_path.reverse();
-                        if contains_tier1 {
-                            let mut first_tier1: usize = usize::MAX;
-                            for (i, asn) in u32_path.iter().enumerate() {
-                                if TIER1.contains(asn) && first_tier1 == usize::MAX {
-                                    first_tier1 = i;
-                                    break;
-                                }
-                            }
-
-                            // origin to first tier 1
-                            if first_tier1 < u32_path.len() - 1 {
-                                for i in 0..first_tier1 {
-                                    let (asn1, asn2) =
-                                        (u32_path.get(i).unwrap(), u32_path.get(i + 1).unwrap());
-                                    let (msg_count, peers) = as2rel_map
-                                        .entry((*asn2, *asn1, 1))
-                                        .or_insert((0, HashSet::new()));
-                                    *msg_count += 1;
-                                    peers.insert(elem.peer_ip);
-                                }
-                            }
-                        }
                     }
                 }
-                _ => {
-                    // panic!("{}", as_path);
-                    continue;
-                }
-            };
+            }
         }
 
         match elem.prefix.prefix {
             IpNet::V4(net) => {
                 peer_v4_pfxs_map
                     .entry(elem.peer_ip)
-                    .or_insert_with(HashSet::<Ipv4Net>::new)
+                    .or_default()
                     .insert(net);
             }
             IpNet::V6(net) => {
                 peer_v6_pfxs_map
                     .entry(elem.peer_ip)
-                    .or_insert_with(HashSet::<Ipv6Net>::new)
+                    .or_default()
                     .insert(net);
             }
         }

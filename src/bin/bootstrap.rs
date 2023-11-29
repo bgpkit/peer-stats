@@ -43,6 +43,10 @@ struct Opts {
     #[clap(long)]
     ts_end: String,
 
+    /// specify collector
+    #[clap(long)]
+    collector: Option<String>,
+
     /// Output directory
     #[clap(long)]
     output_dir: PathBuf,
@@ -96,6 +100,9 @@ fn main() {
         .page_size(10000);
     if let Ok(url) = std::env::var("BROKER_URL") {
         broker = broker.broker_url(url.as_str());
+    }
+    if let Some(c) = opts.collector {
+        broker = broker.collector_id(c.as_str());
     }
 
     let items: Vec<BrokerItem> = broker
