@@ -120,7 +120,7 @@ fn main() {
         let output_file = format!(
             "{}/{}-latest.json.bz2",
             opts.output_dir.to_str().unwrap(),
-            file_prefix
+            file_prefix.strip_suffix('_').unwrap()
         );
         let mut writer = oneio::get_writer(output_file.as_str()).unwrap();
         let _ = writer.write_all(serde_json::to_string_pretty(&json!(res)).unwrap().as_ref());
