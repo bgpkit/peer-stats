@@ -96,7 +96,8 @@ fn update_as2rel_map(
     as2rel_global_map: &mut HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)>,
     as2rel_v4_map: &mut HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)>,
     as2rel_v6_map: &mut HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)>,
-    as_path: &Vec<u32>,
+    // input AS path must be from collector ([0]) to origin ([last])
+    as_path: &mut Vec<u32>,
     prefix: &IpNet,
     is_global: bool,
 ) {
@@ -108,6 +109,17 @@ fn update_as2rel_map(
         },
     };
 
+    // counting peer relationships
+    for (asn1, asn2) in as_path.iter().tuple_windows::<(&u32, &u32)>() {
+        let (msg_count, peers) = data_map
+            .entry((*asn1, *asn2, 0))
+            .or_insert((0, HashSet::new()));
+        *msg_count += 1;
+        peers.insert(peer_ip);
+    }
+
+    // counting provider-customer relationships
+    as_path.reverse();
     let contains_tier1 = as_path.iter().any(|x| tier1.contains(x));
     if contains_tier1 {
         let mut first_tier1: usize = usize::MAX;
@@ -190,17 +202,6 @@ pub fn parse_rib_file(
                     }
                 }
 
-                // counting peer relationships
-                for (asn1, asn2) in u32_path.iter().tuple_windows::<(&u32, &u32)>() {
-                    let (msg_count, peers) = as2rel_map
-                        .entry((*asn1, *asn2, 0))
-                        .or_insert((0, HashSet::new()));
-                    *msg_count += 1;
-                    peers.insert(elem.peer_ip);
-                }
-
-                u32_path.reverse();
-
                 // do a global and a v4/v6 specific as2rel
                 for is_global in [true, false] {
                     update_as2rel_map(
@@ -208,7 +209,7 @@ pub fn parse_rib_file(
                         &mut as2rel_map,
                         &mut as2rel_v4_map,
                         &mut as2rel_v6_map,
-                        &u32_path,
+                        &mut u32_path,
                         &elem.prefix.prefix,
                         is_global,
                     );
