@@ -12,7 +12,7 @@ use walkdir::WalkDir;
 #[derive(Parser, Debug)]
 struct Opts {
     /// Path to output file
-    output_file: PathBuf,
+    output_dir: PathBuf,
 
     /// Path to the data file directory
     data_dir: PathBuf,
@@ -46,75 +46,85 @@ fn main() {
             .init();
     }
 
-    let file_paths = WalkDir::new(opts.data_dir.to_str().unwrap())
-        .follow_links(true)
-        .into_iter()
-        .filter_map(|e| match e.ok() {
-            Some(entry) => {
-                let path: String = entry.path().to_str().unwrap().to_string();
-                let path_str = path.as_str();
-                if path_str.contains("as2rel_") && path_str.ends_with(".bz2") {
-                    let (year, month, day) = get_ymd_from_file(path.as_str());
-                    let file_date = NaiveDate::from_ymd_opt(year, month, day).unwrap();
-                    let ts = Utc::now().date_naive();
-                    if file_date == ts {
-                        return Some(path);
+    for file_prefix in ["as2rel_", "as2rel-v4_", "as2rel-v6_"] {
+        let file_paths = WalkDir::new(opts.data_dir.to_str().unwrap())
+            .follow_links(true)
+            .into_iter()
+            .filter_map(|e| match e.ok() {
+                Some(entry) => {
+                    let path: String = entry.path().to_str().unwrap().to_string();
+                    let path_str = path.as_str();
+                    if path_str.contains(file_prefix) && path_str.ends_with(".bz2") {
+                        let (year, month, day) = get_ymd_from_file(path.as_str());
+                        let file_date = NaiveDate::from_ymd_opt(year, month, day).unwrap();
+                        let ts = Utc::now().date_naive();
+                        if file_date == ts {
+                            return Some(path);
+                        }
+                        if opts.allow_previous_day && file_date == ts.pred_opt().unwrap() {
+                            return Some(path);
+                        }
                     }
-                    if opts.allow_previous_day && file_date == ts.pred_opt().unwrap() {
-                        return Some(path);
-                    }
+                    None
                 }
-                None
-            }
-            None => None,
-        })
-        .collect::<Vec<String>>();
+                None => None,
+            })
+            .collect::<Vec<String>>();
 
-    if file_paths.is_empty() {
-        info!("no matching current date as2rel file found, skipping");
-        return;
-    }
-
-    let mut data_map: HashMap<(u32, u32, u8), (usize, usize)> = HashMap::new();
-
-    for file in file_paths {
-        info!("processing {}", file.as_str());
-        let mut data = "".to_string();
-        oneio::get_reader(file.as_str())
-            .unwrap()
-            .read_to_string(&mut data)
-            .unwrap();
-        let as2rel_info: As2Rel = serde_json::from_str(&data).unwrap();
-
-        for as2rel in as2rel_info.as2rel {
-            let (asn1, asn2, rel, paths_count, peers_count) = (
-                as2rel.asn1,
-                as2rel.asn2,
-                as2rel.rel,
-                as2rel.paths_count,
-                as2rel.peers_count,
+        if file_paths.is_empty() {
+            info!(
+                "no matching current date {} file found, skipping",
+                file_prefix
             );
-            let (count_1, count_2) = data_map.entry((asn1, asn2, rel)).or_insert((0, 0));
-            *count_1 += paths_count;
-            *count_2 += peers_count;
+            return;
         }
+
+        let mut data_map: HashMap<(u32, u32, u8), (usize, usize)> = HashMap::new();
+
+        for file in file_paths {
+            info!("processing {}", file.as_str());
+            let mut data = "".to_string();
+            oneio::get_reader(file.as_str())
+                .unwrap()
+                .read_to_string(&mut data)
+                .unwrap();
+            let as2rel_info: As2Rel = serde_json::from_str(&data).unwrap();
+
+            for as2rel in as2rel_info.as2rel {
+                let (asn1, asn2, rel, paths_count, peers_count) = (
+                    as2rel.asn1,
+                    as2rel.asn2,
+                    as2rel.rel,
+                    as2rel.paths_count,
+                    as2rel.peers_count,
+                );
+                let (count_1, count_2) = data_map.entry((asn1, asn2, rel)).or_insert((0, 0));
+                *count_1 += paths_count;
+                *count_2 += peers_count;
+            }
+        }
+
+        let res: Vec<As2RelCount> = data_map
+            .into_iter()
+            .map(
+                |((asn1, asn2, rel), (paths_count, peers_count))| As2RelCount {
+                    asn1,
+                    asn2,
+                    rel,
+                    paths_count,
+                    peers_count,
+                },
+            )
+            .collect();
+
+        let output_file = format!(
+            "{}/{}-latest.json.bz2",
+            opts.output_dir.to_str().unwrap(),
+            file_prefix
+        );
+        let mut writer = oneio::get_writer(output_file.as_str()).unwrap();
+        let _ = writer.write_all(serde_json::to_string_pretty(&json!(res)).unwrap().as_ref());
     }
-
-    let res: Vec<As2RelCount> = data_map
-        .into_iter()
-        .map(
-            |((asn1, asn2, rel), (paths_count, peers_count))| As2RelCount {
-                asn1,
-                asn2,
-                rel,
-                paths_count,
-                peers_count,
-            },
-        )
-        .collect();
-
-    let mut writer = oneio::get_writer(opts.output_file.to_str().unwrap()).unwrap();
-    let _ = writer.write_all(serde_json::to_string_pretty(&json!(res)).unwrap().as_ref());
 }
 
 #[cfg(test)]

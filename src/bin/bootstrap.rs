@@ -129,7 +129,7 @@ fn main() {
     let (sender_pb, receiver_pb) = channel::<String>();
 
     // dedicated thread for showing progress of the parsing
-    thread::spawn(move || {
+    let handle = thread::spawn(move || {
         let sty = ProgressStyle::default_bar()
             .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {eta} {msg}")
             .progress_chars("##-");
@@ -143,7 +143,7 @@ fn main() {
 
     let output_dir = opts.output_dir.to_str().unwrap();
 
-    let data_types = ["peer-stats", "pfx2as", "as2rel"];
+    let data_types = ["peer-stats", "pfx2as", "as2rel", "as2rel-v4", "as2rel-v6"];
 
     items.par_iter().for_each_with(sender_pb, |s1, item| {
         let ts = item.ts_start;
@@ -151,14 +151,24 @@ fn main() {
 
         let mut file_path_map: HashMap<String, String> = HashMap::new();
         for data_type in data_types {
-            let file_dir = format!(
-                "{}/{}/{}/{:02}/{:02}",
-                output_dir,
-                data_type,
-                &item.collector_id,
-                ts.year(),
-                ts.month()
-            );
+            let file_dir = match data_type.starts_with("as2rel") {
+                true => format!(
+                    "{}/{}/{}/{:02}/{:02}",
+                    output_dir,
+                    "as2rel",
+                    &item.collector_id,
+                    ts.year(),
+                    ts.month()
+                ),
+                false => format!(
+                    "{}/{}/{}/{:02}/{:02}",
+                    output_dir,
+                    data_type,
+                    &item.collector_id,
+                    ts.year(),
+                    ts.month()
+                ),
+            };
             fs::create_dir_all(file_dir.as_str()).unwrap();
             let output_path = format!(
                 "{}/{}_{}_{}-{:02}-{:02}_{}.bz2",
@@ -189,7 +199,7 @@ fn main() {
         // parsing and writing out info, manually scoping to potentially avoid memory issue
         {
             info!("start parsing file {}", item.url.as_str());
-            let (peer_stats, pfx2as, as2rel) = match parse_rib_file(
+            let (peer_stats, pfx2as, (as2rel_global, as2rel_v4, as2rel_v6)) = match parse_rib_file(
                 item.url.as_str(),
                 project.as_str(),
                 item.collector_id.as_str(),
@@ -212,11 +222,22 @@ fn main() {
             );
             write_results(
                 file_path_map.get("as2rel").unwrap().as_str(),
-                &json!(as2rel),
+                &json!(as2rel_global),
+            );
+            write_results(
+                file_path_map.get("as2rel-v4").unwrap().as_str(),
+                &json!(as2rel_v4),
+            );
+            write_results(
+                file_path_map.get("as2rel-v6").unwrap().as_str(),
+                &json!(as2rel_v6),
             );
         }
 
         let _ = s1.send(format!("{}-{}", item.collector_id.as_str(), timestamp));
+
         info!("processing file {} finished", item.url.as_str());
-    });
+    }); // end of parallel iter
+
+    handle.join().unwrap();
 }

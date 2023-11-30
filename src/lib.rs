@@ -66,6 +66,16 @@ const TIER1: [u32; 17] = [
     6939,
 ];
 
+const TIER1_V4: [u32; 17] = [
+    6762, 12956, 2914, 3356, 6453, 1239, 701, 6461, 3257, 1299, 3491, 7018, 3320, 5511, 6830, 174,
+    0,
+];
+
+const TIER1_V6: [u32; 17] = [
+    6762, 12956, 2914, 3356, 6453, 1239, 701, 6461, 3257, 1299, 3491, 7018, 3320, 5511, 6830, 174,
+    6939,
+];
+
 fn dedup_path(path: Vec<u32>) -> Vec<u32> {
     if path.len() <= 1 {
         return path;
@@ -79,6 +89,47 @@ fn dedup_path(path: Vec<u32>) -> Vec<u32> {
         }
     }
     new_path
+}
+
+fn update_as2rel_map(
+    peer_ip: IpAddr,
+    as2rel_global_map: &mut HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)>,
+    as2rel_v4_map: &mut HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)>,
+    as2rel_v6_map: &mut HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)>,
+    as_path: &Vec<u32>,
+    prefix: &IpNet,
+    is_global: bool,
+) {
+    let (tier1, data_map) = match is_global {
+        true => (TIER1, as2rel_global_map),
+        false => match prefix {
+            IpNet::V4(_) => (TIER1_V4, as2rel_v4_map),
+            IpNet::V6(_) => (TIER1_V6, as2rel_v6_map),
+        },
+    };
+
+    let contains_tier1 = as_path.iter().any(|x| tier1.contains(x));
+    if contains_tier1 {
+        let mut first_tier1: usize = usize::MAX;
+        for (i, asn) in as_path.iter().enumerate() {
+            if tier1.contains(asn) && first_tier1 == usize::MAX {
+                first_tier1 = i;
+                break;
+            }
+        }
+
+        // origin to first tier 1
+        if first_tier1 < as_path.len() - 1 {
+            for i in 0..first_tier1 {
+                let (asn1, asn2) = (as_path.get(i).unwrap(), as_path.get(i + 1).unwrap());
+                let (msg_count, peers) = data_map
+                    .entry((*asn2, *asn1, 1))
+                    .or_insert((0, HashSet::new()));
+                *msg_count += 1;
+                peers.insert(peer_ip);
+            }
+        }
+    }
 }
 
 /// collect information from a provided RIB file
@@ -95,7 +146,7 @@ pub fn parse_rib_file(
     file_url: &str,
     project: &str,
     collector: &str,
-) -> Result<(RibPeerInfo, Prefix2As, As2Rel)> {
+) -> Result<(RibPeerInfo, Prefix2As, (As2Rel, As2Rel, As2Rel))> {
     // peer-stats
     let mut peer_asn_map: HashMap<IpAddr, u32> = HashMap::new();
     let mut peer_connection: HashMap<IpAddr, HashSet<u32>> = HashMap::new();
@@ -107,6 +158,8 @@ pub fn parse_rib_file(
 
     // as2rel
     let mut as2rel_map: HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)> = HashMap::new();
+    let mut as2rel_v4_map: HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)> = HashMap::new();
+    let mut as2rel_v6_map: HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)> = HashMap::new();
 
     for (_elem_count, elem) in (BgpkitParser::new(file_url)?).into_iter().enumerate() {
         peer_asn_map
@@ -146,30 +199,19 @@ pub fn parse_rib_file(
                     peers.insert(elem.peer_ip);
                 }
 
-                let contains_tier1 = u32_path.iter().any(|x| TIER1.contains(x));
-
                 u32_path.reverse();
-                if contains_tier1 {
-                    let mut first_tier1: usize = usize::MAX;
-                    for (i, asn) in u32_path.iter().enumerate() {
-                        if TIER1.contains(asn) && first_tier1 == usize::MAX {
-                            first_tier1 = i;
-                            break;
-                        }
-                    }
 
-                    // origin to first tier 1
-                    if first_tier1 < u32_path.len() - 1 {
-                        for i in 0..first_tier1 {
-                            let (asn1, asn2) =
-                                (u32_path.get(i).unwrap(), u32_path.get(i + 1).unwrap());
-                            let (msg_count, peers) = as2rel_map
-                                .entry((*asn2, *asn1, 1))
-                                .or_insert((0, HashSet::new()));
-                            *msg_count += 1;
-                            peers.insert(elem.peer_ip);
-                        }
-                    }
+                // do a global and a v4/v6 specific as2rel
+                for is_global in [true, false] {
+                    update_as2rel_map(
+                        elem.peer_ip,
+                        &mut as2rel_map,
+                        &mut as2rel_v4_map,
+                        &mut as2rel_v6_map,
+                        &u32_path,
+                        &elem.prefix.prefix,
+                        is_global,
+                    );
                 }
             }
         }
@@ -215,7 +257,27 @@ pub fn parse_rib_file(
         .map(|((prefix, asn), count)| Prefix2AsCount { prefix, asn, count })
         .collect();
 
-    let as2rel = as2rel_map
+    let as2rel_global = as2rel_map
+        .into_iter()
+        .map(|((asn1, asn2, rel), (msg_count, peers))| As2RelCount {
+            asn1,
+            asn2,
+            rel,
+            paths_count: msg_count,
+            peers_count: peers.len(),
+        })
+        .collect();
+    let as2rel_v4 = as2rel_v4_map
+        .into_iter()
+        .map(|((asn1, asn2, rel), (msg_count, peers))| As2RelCount {
+            asn1,
+            asn2,
+            rel,
+            paths_count: msg_count,
+            peers_count: peers.len(),
+        })
+        .collect();
+    let as2rel_v6 = as2rel_v6_map
         .into_iter()
         .map(|((asn1, asn2, rel), (msg_count, peers))| As2RelCount {
             asn1,
@@ -239,12 +301,26 @@ pub fn parse_rib_file(
             rib_dump_url: file_url.to_string(),
             pfx2as,
         },
-        As2Rel {
-            project: project.to_string(),
-            collector: collector.to_string(),
-            rib_dump_url: file_url.to_string(),
-            as2rel,
-        },
+        (
+            As2Rel {
+                project: project.to_string(),
+                collector: collector.to_string(),
+                rib_dump_url: file_url.to_string(),
+                as2rel: as2rel_global,
+            },
+            As2Rel {
+                project: project.to_string(),
+                collector: collector.to_string(),
+                rib_dump_url: file_url.to_string(),
+                as2rel: as2rel_v4,
+            },
+            As2Rel {
+                project: project.to_string(),
+                collector: collector.to_string(),
+                rib_dump_url: file_url.to_string(),
+                as2rel: as2rel_v6,
+            },
+        ),
     ))
 }
 
