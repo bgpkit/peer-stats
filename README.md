@@ -34,7 +34,7 @@ cargo install --path .
 ### Single-file Processing
 ```text
 (venv) ➜  peer-stats git:(main) ✗ peer-stats --help
-peer-stats 0.1.0
+peer-stats 0.2.0
 peer-stats is a CLI tool that collects peer information from a given RIB dump file
 
 USAGE:
