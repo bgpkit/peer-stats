@@ -97,7 +97,7 @@ fn main() {
         .ts_start(opts.ts_start.as_str())
         .ts_end(opts.ts_end.as_str())
         .data_type("rib")
-        .page_size(10000);
+        .page_size(1000);
     if let Ok(url) = std::env::var("BROKER_URL") {
         broker = broker.broker_url(url.as_str());
     }
