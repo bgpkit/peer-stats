@@ -93,21 +93,12 @@ fn dedup_path(path: Vec<u32>) -> Vec<u32> {
 
 fn update_as2rel_map(
     peer_ip: IpAddr,
-    as2rel_global_map: &mut HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)>,
-    as2rel_v4_map: &mut HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)>,
-    as2rel_v6_map: &mut HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)>,
+    tier1: &[u32],
+    data_map: &mut HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)>,
     // input AS path must be from collector ([0]) to origin ([last])
-    as_path: &mut Vec<u32>,
-    prefix: &IpNet,
-    is_global: bool,
+    original_as_path: &[u32],
 ) {
-    let (tier1, data_map) = match is_global {
-        true => (TIER1, as2rel_global_map),
-        false => match prefix {
-            IpNet::V4(_) => (TIER1_V4, as2rel_v4_map),
-            IpNet::V6(_) => (TIER1_V6, as2rel_v6_map),
-        },
-    };
+    let mut as_path = original_as_path.to_vec();
 
     // counting peer relationships
     for (asn1, asn2) in as_path.iter().tuple_windows::<(&u32, &u32)>() {
@@ -144,6 +135,21 @@ fn update_as2rel_map(
     }
 }
 
+fn compile_as2rel_count(
+    data_map: &HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)>,
+) -> Vec<As2RelCount> {
+    data_map
+        .into_iter()
+        .map(|((asn1, asn2, rel), (msg_count, peers))| As2RelCount {
+            asn1: *asn1,
+            asn2: *asn2,
+            rel: *rel,
+            paths_count: *msg_count,
+            peers_count: peers.len(),
+        })
+        .collect()
+}
+
 /// collect information from a provided RIB file
 ///
 /// Info to collect:
@@ -173,14 +179,12 @@ pub fn parse_rib_file(
     let mut as2rel_v4_map: HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)> = HashMap::new();
     let mut as2rel_v6_map: HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)> = HashMap::new();
 
-    for (_elem_count, elem) in (BgpkitParser::new(file_url)?).into_iter().enumerate() {
+    for elem in BgpkitParser::new(file_url)? {
         peer_asn_map
             .entry(elem.peer_ip)
-            .or_insert(elem.peer_asn.asn);
+            .or_insert(elem.peer_asn.to_u32());
         if let Some(as_path) = elem.as_path.clone() {
-            if let Some(mut u32_path) = as_path.to_u32_vec() {
-                u32_path.dedup();
-
+            if let Some(u32_path) = as_path.to_u32_vec_opt(true) {
                 // peer-stats
                 match u32_path.get(1) {
                     None => {}
@@ -204,15 +208,16 @@ pub fn parse_rib_file(
 
                 // do a global and a v4/v6 specific as2rel
                 for is_global in [true, false] {
-                    update_as2rel_map(
-                        elem.peer_ip,
-                        &mut as2rel_map,
-                        &mut as2rel_v4_map,
-                        &mut as2rel_v6_map,
-                        &mut u32_path,
-                        &elem.prefix.prefix,
-                        is_global,
-                    );
+                    // get tier-1 ASes list and the corresponding as2rel_map
+                    let (tier1, data_map) = match is_global {
+                        true => (TIER1.to_vec(), &mut as2rel_map),
+                        false => match elem.prefix.prefix {
+                            IpNet::V4(_) => (TIER1_V4.to_vec(), &mut as2rel_v4_map),
+                            IpNet::V6(_) => (TIER1_V6.to_vec(), &mut as2rel_v6_map),
+                        },
+                    };
+                    // update as2rel_map
+                    update_as2rel_map(elem.peer_ip, &tier1, data_map, &u32_path);
                 }
             }
         }
@@ -258,36 +263,9 @@ pub fn parse_rib_file(
         .map(|((prefix, asn), count)| Prefix2AsCount { prefix, asn, count })
         .collect();
 
-    let as2rel_global = as2rel_map
-        .into_iter()
-        .map(|((asn1, asn2, rel), (msg_count, peers))| As2RelCount {
-            asn1,
-            asn2,
-            rel,
-            paths_count: msg_count,
-            peers_count: peers.len(),
-        })
-        .collect();
-    let as2rel_v4 = as2rel_v4_map
-        .into_iter()
-        .map(|((asn1, asn2, rel), (msg_count, peers))| As2RelCount {
-            asn1,
-            asn2,
-            rel,
-            paths_count: msg_count,
-            peers_count: peers.len(),
-        })
-        .collect();
-    let as2rel_v6 = as2rel_v6_map
-        .into_iter()
-        .map(|((asn1, asn2, rel), (msg_count, peers))| As2RelCount {
-            asn1,
-            asn2,
-            rel,
-            paths_count: msg_count,
-            peers_count: peers.len(),
-        })
-        .collect();
+    let as2rel_global = compile_as2rel_count(&as2rel_map);
+    let as2rel_v4 = compile_as2rel_count(&as2rel_v4_map);
+    let as2rel_v6 = compile_as2rel_count(&as2rel_v6_map);
 
     Ok((
         RibPeerInfo {
