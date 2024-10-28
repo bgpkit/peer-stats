@@ -139,7 +139,7 @@ fn compile_as2rel_count(
     data_map: &HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)>,
 ) -> Vec<As2RelCount> {
     data_map
-        .into_iter()
+        .iter()
         .map(|((asn1, asn2, rel), (msg_count, peers))| As2RelCount {
             asn1: *asn1,
             asn2: *asn2,
