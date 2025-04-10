@@ -75,15 +75,15 @@ fn main() {
             .init();
     }
 
-    let num_threads = if let Ok(v) = std::env::var("MAX_THREADS") {
+    let mut num_threads = num_cpus::get();
+    if let Ok(v) = std::env::var("MAX_THREADS") {
         if let Ok(t) = v.parse::<usize>() {
-            t
-        } else {
-            num_cpus::get()
+            if t <= num_threads {
+                // ensure the number of threads we use does not exceed the maximum threads count
+                num_threads = t;
+            }
         }
-    } else {
-        num_cpus::get()
-    };
+    }
 
     rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
@@ -147,7 +147,7 @@ fn main() {
 
     items.par_iter().for_each_with(sender_pb, |s1, item| {
         let ts = item.ts_start;
-        let timestamp = ts.timestamp();
+        let timestamp = ts.and_utc().timestamp();
 
         let mut file_path_map: HashMap<String, String> = HashMap::new();
         for data_type in data_types {
