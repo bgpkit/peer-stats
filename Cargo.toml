@@ -2,6 +2,15 @@
 name = "peer-stats"
 version = "0.2.1"
 edition = "2021"
+authors = ["Mingwei Zhang <mingwei@bgpkit.com>"]
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/bgpkit/peer-stats"
+documentation = "https://docs.rs/peer-stats"
+description = """
+Generating BGP collector peers statistics from RIB dump files
+"""
+keywords = ["bgp", "bgpkit", "mrt"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

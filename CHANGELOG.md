@@ -7,8 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Highlights
 
 * make sure we don't use more threads than the system has available
-* update dependnecies
-*
+* update dependencies
 
 ## v0.2.0 - 2024-02-01
 
