@@ -3,7 +3,7 @@ pub mod peer_stats;
 pub mod pfx2as;
 
 // Re-export tier-1 constants from as2rel
-pub use as2rel::{CANDIDATE_TIER1_V4, CANDIDATE_TIER1_V6, TIER1, TIER1_V4, TIER1_V6, TRUE_TIER1};
+pub use as2rel::{CANDIDATE_TIER1_V4, CANDIDATE_TIER1_V6, TRUE_TIER1};
 
 // Re-export types from their respective modules
 pub use as2rel::{As2Rel, As2RelCount};
