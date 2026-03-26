@@ -1,106 +1,164 @@
-# Peer Information Collector
+# Peer Stats
 
-`peer-stats` is a tool that collects BGP route collector peer information from the
-archived MRT RIB dump files. The basic idea is to scan through all entries in a given
-RIB dump file and aggregate information on per-peer basis.
+[![Peer Stats](https://img.shields.io/badge/peer--stats-data.bgpkit.com-blue)](https://data.bgpkit.com/peer-stats)
+[![AS2Rel](https://img.shields.io/badge/as2rel-data.bgpkit.com-blue)](https://data.bgpkit.com/as2rel/)
+[![Pfx2As](https://img.shields.io/badge/pfx2as-data.bgpkit.com-blue)](https://data.bgpkit.com/pfx2as/)
 
-## Metrics
+A Rust library and CLI tool for processing BGP RIB dump files to extract peer statistics, AS relationships, and prefix-to-AS mappings.
 
-We collect the following information and metrics for each peer in a table dump file:
+**Hosted Results**: Processed data is available at:
+- [data.bgpkit.com/peer-stats](https://data.bgpkit.com/peer-stats) - Peer statistics with daily updates dating back to 2012
+- [data.bgpkit.com/as2rel](https://data.bgpkit.com/as2rel/) - AS relationship inferences
+- [data.bgpkit.com/pfx2as](https://data.bgpkit.com/pfx2as/) - Prefix-to-AS mappings
 
-- `asn`: peer ASN
-- `ip`: peer IP
-- `num_v4_pfxs`: the number of IPv4 IP prefixes from this peer
-- `num_v6_pfxs`: the number of IPv6 IP prefixes from this peer
-- `num_connected_asns`: the number of unique next-hop ASNs connected to this peer
+## Overview
 
-## Public Dataset
+This crate provides three main processors for analyzing BGP data:
 
-We provide a publicly available dataset at https://data.bgpkit.com/peer-stats. 
-We update this dataset daily and also provide historical data archive back to 2012.
+1. **Peer Stats** (`peer_stats.rs`): Collects per-peer statistics including ASN, IP, and prefix counts
+2. **AS2Rel** (`as2rel.rs`): Infers AS relationships (provider-customer) using a tier-1 transit algorithm
+3. **Pfx2As** (`pfx2as.rs`): Maps IP prefixes to their origin ASes
 
-## Usage
+All processors use a consistent pattern: `new()` → `process_*()` → `into_*()`
 
-###  Installation
+## Features
 
-Rust toolchain is required for installing this tool.
+- **Modular Architecture**: Each processor is self-contained in its own module
+- **Tier-1 Transit Algorithm**: Distinguishes between true tier-1 ASes and candidate tier-1 ASes (Zayo 6461, Hurricane Electric 6939) to prevent over-counting downstream ASes
+- **Processor Pattern**: Consistent API across all modules
+- **SQLite Indexing**: Tools to index processed data into SQLite databases
 
-Run the following command to install the compiled `peer-stats` tool to `~.cargo/bin/peer-stats`.
+## AS Relationship Inference
+
+The AS2Rel processor uses a two-tier algorithm to infer provider-customer relationships:
+
+- **True Tier-1 ASes** (14 networks): Always considered transit providers
+  - Cogent (174), Lumen (3356), NTT (2914), Verizon (701), etc.
+- **Candidate Tier-1 ASes**: Only transit providers when next hop is tier-1
+  - AS 6461 (Zayo) - IPv4 and IPv6
+  - AS 6939 (Hurricane Electric) - IPv6 only
+
+This prevents over-counting downstream ASes for networks that peer extensively but don't sell transit service.
+
+## Installation
+
+Rust toolchain is required:
+
 ```bash
 cargo install --path .
 ```
 
+## Binaries
 
-### Single-file Processing
-```text
-(venv) ➜  peer-stats git:(main) ✗ peer-stats --help
-peer-stats 0.2.0
-peer-stats is a CLI tool that collects peer information from a given RIB dump file
+The project builds 5 binaries:
 
-USAGE:
-    peer-stats [FLAGS] <rib-file>
+### peer-stats-single-file
+Process a single RIB dump file (outputs all three data types):
 
-FLAGS:
-        --debug      whether to print debug
-    -h, --help       Prints help information
-    -V, --version    Prints version information
-
-ARGS:
-    <rib-file>    File path to a MRT file, local or remote
-```
-
-Example:
 ```bash
-peer-stats --debug http://archive.routeviews.org/route-views.sg/bgpdata/2022.02/RIBS/rib.20220205.1800.bz2 
+peer-stats-single-file --debug http://archive.routeviews.org/route-views.sg/bgpdata/2022.02/RIBS/rib.20220205.1800.bz2
 ```
 
-### Historical Data Bootstrap
+### peer-stats-bootstrap
+Bootstrap historical data collection:
 
-Use `MAX_THREADS` environment variable to configure maximum number of threads to use for processing.
-
-```text
-peer-stats 0.1.0
-peer-stats is a CLI tool that collects peer information from a given RIB dump file
-
-USAGE:
-    peer-stats-bootstrap [FLAGS] --output-dir <output-dir> --ts-end <ts-end> --ts-start <ts-start>
-
-FLAGS:
-        --debug         whether to print debug
-        --dry-run       whether to dry run the code
-    -h, --help          Prints help information
-        --only-daily    whether to do only daily parsing
-    -V, --version       Prints version information
-
-OPTIONS:
-        --output-dir <output-dir>    Output directory
-        --ts-end <ts-end>            end timestamp
-        --ts-start <ts-start>        start timestamp
+```bash
+MAX_THREADS=8 peer-stats-bootstrap --output-dir ./data --ts-start 2022-01-01 --ts-end 2022-02-01
 ```
 
-## Output
+### peer-stats-index
+Index peer statistics into SQLite:
 
-The commandline tool, `peer-stats`, outputs JSON-formatted string to stdout. Debug messages are displayed to
-stderr, and thus will not interrupt the result output.
+```bash
+peer-stats-index --db-path ./peer-stats.db --input-dir ./data
+```
 
-The format is as follows (removed all peers info but one for conciseness):
+### as2rel-index
+Index AS relationships into SQLite:
+
+```bash
+as2rel-index --db-path ./as2rel.db --input-dir ./data
+```
+
+### pfx2as-index
+Index prefix-to-AS mappings into SQLite:
+
+```bash
+pfx2as-index --db-path ./pfx2as.db --input-dir ./data
+```
+
+## Library Usage
+
+```rust
+use peer_stats::parse_rib_file;
+
+let (peer_stats, pfx2as, (as2rel_global, as2rel_v4, as2rel_v6)) = 
+    parse_rib_file(
+        "http://archive.routeviews.org/.../rib.20220205.1800.bz2",
+        "route-views",
+        "route-views.sg"
+    ).unwrap();
+```
+
+## Data Types
+
+### Peer Stats Output
 ```json
 {
+  "project": "route-views",
   "collector": "route-views.sg",
+  "rib_dump_url": "...",
   "peers": {
     "2001:de8:4::13:6168:1": {
       "asn": 136168,
       "ip": "2001:de8:4::13:6168:1",
-      "num_connected_asns": 4,
       "num_v4_pfxs": 0,
-      "num_v6_pfxs": 40
-    },
-    "project": "route-views",
-    "rib_dump_url": "http://archive.routeviews.org/route-views.sg/bgpdata/2022.02/RIBS/rib.20220205.1800.bz2"
+      "num_v6_pfxs": 40,
+      "num_connected_asns": 4
+    }
   }
 }
 ```
 
-## LICENSE
+### AS2Rel Output
+```json
+{
+  "project": "route-views",
+  "collector": "route-views.sg",
+  "rib_dump_url": "...",
+  "as2rel": [
+    {
+      "asn1": 174,
+      "asn2": 13335,
+      "rel": 1,
+      "paths_count": 42,
+      "peers_count": 3
+    }
+  ]
+}
+```
+
+### Pfx2As Output
+```json
+{
+  "project": "route-views",
+  "collector": "route-views.sg",
+  "rib_dump_url": "...",
+  "pfx2as": [
+    {
+      "prefix": "1.1.1.0/24",
+      "asn": 13335,
+      "count": 5
+    }
+  ]
+}
+```
+
+## Public Dataset
+
+We provide a publicly available dataset at https://data.bgpkit.com/peer-stats.
+We update this dataset daily and provide historical data archive back to 2012.
+
+## License
 
 This work is under [MIT](LICENSE) license.
