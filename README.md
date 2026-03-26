@@ -7,7 +7,7 @@
 A Rust library and CLI tool for processing BGP RIB dump files to extract peer statistics, AS relationships, and prefix-to-AS mappings.
 
 **Hosted Results**: Processed data is available at:
-- [data.bgpkit.com/peer-stats](https://data.bgpkit.com/peer-stats) - Peer statistics with daily updates dating back to 2012
+- [data.bgpkit.com/peer-stats](https://data.bgpkit.com/peer-stats) - Peer statistics
 - [data.bgpkit.com/as2rel](https://data.bgpkit.com/as2rel/) - AS relationship inferences
 - [data.bgpkit.com/pfx2as](https://data.bgpkit.com/pfx2as/) - Prefix-to-AS mappings
 
@@ -156,8 +156,7 @@ let (peer_stats, pfx2as, (as2rel_global, as2rel_v4, as2rel_v6)) =
 
 ## Public Dataset
 
-We provide a publicly available dataset at https://data.bgpkit.com/peer-stats.
-We update this dataset daily and provide historical data archive back to 2012.
+We provide a publicly available dataset at https://data.bgpkit.com.
 
 ## License
 
