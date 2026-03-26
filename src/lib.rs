@@ -1,151 +1,25 @@
 #![allow(dead_code)]
+
+pub mod as2rel;
+pub mod peer_stats;
+pub mod pfx2as;
+
+// Re-export tier-1 constants from as2rel
+pub use as2rel::{TIER1, TIER1_V4, TIER1_V6};
+
+// Re-export types from their respective modules
+pub use as2rel::{As2Rel, As2RelCount};
+pub use peer_stats::{PeerInfo, RibPeerInfo};
+pub use pfx2as::{Prefix2As, Prefix2AsCount};
+
+// Re-export processors
+pub use as2rel::{dedup_path, As2RelProcessor};
+pub use peer_stats::PeerStatsProcessor;
+pub use pfx2as::Pfx2AsProcessor;
+
 use anyhow::Result;
 use bgpkit_parser::BgpkitParser;
-use ipnet::{IpNet, Ipv4Net, Ipv6Net};
-use itertools::Itertools;
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::net::IpAddr;
-
-#[derive(Debug, Clone, Serialize)]
-pub struct RibPeerInfo {
-    pub project: String,
-    pub collector: String,
-    pub rib_dump_url: String,
-    pub peers: HashMap<IpAddr, PeerInfo>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct PeerInfo {
-    pub ip: IpAddr,
-    pub asn: u32,
-    pub num_v4_pfxs: usize,
-    pub num_v6_pfxs: usize,
-    pub num_connected_asns: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Prefix2As {
-    pub project: String,
-    pub collector: String,
-    pub rib_dump_url: String,
-    /// prefix to as mapping: <prefix, <asn, count>>
-    pub pfx2as: Vec<Prefix2AsCount>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Prefix2AsCount {
-    pub prefix: String,
-    pub asn: u32,
-    pub count: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct As2Rel {
-    pub project: String,
-    pub collector: String,
-    pub rib_dump_url: String,
-    /// prefix to as mapping: <prefix, <asn, count>>
-    pub as2rel: Vec<As2RelCount>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct As2RelCount {
-    pub asn1: u32,
-    pub asn2: u32,
-    /// 1 - asn1 is upstream of asn2, 2 - peer, 0 - unknown
-    pub rel: u8,
-    /// number of paths having this relationship
-    pub paths_count: usize,
-    /// number of peers seeing this relationship
-    pub peers_count: usize,
-}
-
-const TIER1: [u32; 16] = [
-    6762, 12956, 2914, 3356, 6453, 701, 6461, 3257, 1299, 3491, 7018, 3320, 5511, 6830, 174, 6939,
-];
-
-const TIER1_V4: [u32; 16] = [
-    6762, 12956, 2914, 3356, 6453, 701, 6461, 3257, 1299, 3491, 7018, 3320, 5511, 6830, 174, 0,
-];
-
-const TIER1_V6: [u32; 16] = [
-    6762, 12956, 2914, 3356, 6453, 701, 6461, 3257, 1299, 3491, 7018, 3320, 5511, 6830, 174, 6939,
-];
-
-fn dedup_path(path: Vec<u32>) -> Vec<u32> {
-    if path.len() <= 1 {
-        return path;
-    }
-
-    let mut new_path = vec![path[0]];
-
-    for (asn1, asn2) in path.into_iter().tuple_windows::<(u32, u32)>() {
-        if asn1 != asn2 {
-            new_path.push(asn2)
-        }
-    }
-    new_path
-}
-
-fn update_as2rel_map(
-    peer_ip: IpAddr,
-    tier1: &[u32],
-    data_map: &mut HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)>,
-    // input AS path must be from collector ([0]) to origin ([last])
-    original_as_path: &[u32],
-) {
-    let mut as_path = original_as_path.to_vec();
-
-    // counting peer relationships
-    for (asn1, asn2) in as_path.iter().tuple_windows::<(&u32, &u32)>() {
-        let (msg_count, peers) = data_map
-            .entry((*asn1, *asn2, 0))
-            .or_insert((0, HashSet::new()));
-        *msg_count += 1;
-        peers.insert(peer_ip);
-    }
-
-    // counting provider-customer relationships
-    as_path.reverse();
-    let contains_tier1 = as_path.iter().any(|x| tier1.contains(x));
-    if contains_tier1 {
-        let mut first_tier1: usize = usize::MAX;
-        for (i, asn) in as_path.iter().enumerate() {
-            if tier1.contains(asn) && first_tier1 == usize::MAX {
-                first_tier1 = i;
-                break;
-            }
-        }
-
-        // origin to first tier 1
-        if first_tier1 < as_path.len() - 1 {
-            for i in 0..first_tier1 {
-                let (asn1, asn2) = (as_path.get(i).unwrap(), as_path.get(i + 1).unwrap());
-                let (msg_count, peers) = data_map
-                    .entry((*asn2, *asn1, 1))
-                    .or_insert((0, HashSet::new()));
-                *msg_count += 1;
-                peers.insert(peer_ip);
-            }
-        }
-    }
-}
-
-fn compile_as2rel_count(
-    data_map: &HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)>,
-) -> Vec<As2RelCount> {
-    data_map
-        .iter()
-        .map(|((asn1, asn2, rel), (msg_count, peers))| As2RelCount {
-            asn1: *asn1,
-            asn2: *asn2,
-            rel: *rel,
-            paths_count: *msg_count,
-            peers_count: peers.len(),
-        })
-        .collect()
-}
+use ipnet::IpNet;
 
 /// collect information from a provided RIB file
 ///
@@ -162,147 +36,61 @@ pub fn parse_rib_file(
     project: &str,
     collector: &str,
 ) -> Result<(RibPeerInfo, Prefix2As, (As2Rel, As2Rel, As2Rel))> {
-    // peer-stats
-    let mut peer_asn_map: HashMap<IpAddr, u32> = HashMap::new();
-    let mut peer_connection: HashMap<IpAddr, HashSet<u32>> = HashMap::new();
-    let mut peer_v4_pfxs_map: HashMap<IpAddr, HashSet<Ipv4Net>> = HashMap::new();
-    let mut peer_v6_pfxs_map: HashMap<IpAddr, HashSet<Ipv6Net>> = HashMap::new();
-
-    // pfx2as
-    let mut pfx2as_map: HashMap<(String, u32), usize> = HashMap::new();
-
-    // as2rel
-    let mut as2rel_map: HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)> = HashMap::new();
-    let mut as2rel_v4_map: HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)> = HashMap::new();
-    let mut as2rel_v6_map: HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)> = HashMap::new();
+    let mut peer_stats_collector = PeerStatsProcessor::new();
+    let mut pfx2as_collector = Pfx2AsProcessor::new();
+    let mut as2rel_collector = As2RelProcessor::new();
 
     for elem in BgpkitParser::new(file_url)? {
-        peer_asn_map
-            .entry(elem.peer_ip)
-            .or_insert(elem.peer_asn.to_u32());
+        let peer_ip = elem.peer_ip;
+        let peer_asn = elem.peer_asn.to_u32();
+        let prefix = elem.prefix.prefix;
+
+        // Extract prefix info
+        let (prefix_v4, prefix_v6) = match prefix {
+            IpNet::V4(net) => (Some(net), None),
+            IpNet::V6(net) => (None, Some(net)),
+        };
+
+        // Process AS path data
+        let mut connected_asn = None;
         if let Some(as_path) = elem.as_path.clone() {
             if let Some(u32_path) = as_path.to_u32_vec_opt(true) {
-                // peer-stats
-                match u32_path.get(1) {
-                    None => {}
-                    Some(asn) => {
-                        peer_connection
-                            .entry(elem.peer_ip)
-                            .or_default()
-                            .insert(*asn);
-                    }
-                };
+                // Get connected ASN (second hop in path)
+                connected_asn = u32_path.get(1).copied();
 
-                // pfx2as
-                match u32_path.last() {
-                    None => {}
-                    Some(asn) => {
-                        let prefix = elem.prefix.to_string();
-                        let count = pfx2as_map.entry((prefix, *asn)).or_insert(0);
-                        *count += 1;
-                    }
+                // Get origin ASN for pfx2as
+                if let Some(origin_asn) = u32_path.last().copied() {
+                    pfx2as_collector.record(prefix.to_string(), origin_asn);
                 }
 
-                // do a global and a v4/v6 specific as2rel
-                for is_global in [true, false] {
-                    // get tier-1 ASes list and the corresponding as2rel_map
-                    let (tier1, data_map) = match is_global {
-                        true => (TIER1.to_vec(), &mut as2rel_map),
-                        false => match elem.prefix.prefix {
-                            IpNet::V4(_) => (TIER1_V4.to_vec(), &mut as2rel_v4_map),
-                            IpNet::V6(_) => (TIER1_V6.to_vec(), &mut as2rel_v6_map),
-                        },
-                    };
-                    // update as2rel_map
-                    update_as2rel_map(elem.peer_ip, &tier1, data_map, &u32_path);
-                }
+                // Process AS relationships
+                as2rel_collector.process_path(peer_ip, prefix, &u32_path);
             }
         }
 
-        match elem.prefix.prefix {
-            IpNet::V4(net) => {
-                peer_v4_pfxs_map
-                    .entry(elem.peer_ip)
-                    .or_default()
-                    .insert(net);
-            }
-            IpNet::V6(net) => {
-                peer_v6_pfxs_map
-                    .entry(elem.peer_ip)
-                    .or_default()
-                    .insert(net);
-            }
-        }
+        // Update peer stats
+        peer_stats_collector.process_element(
+            peer_ip,
+            peer_asn,
+            prefix_v4,
+            prefix_v6,
+            connected_asn,
+        );
+
         drop(elem);
     }
 
-    let mut peer_info_map: HashMap<IpAddr, PeerInfo> = HashMap::new();
-    for (ip, asn) in peer_asn_map {
-        let num_v4_pfxs = peer_v4_pfxs_map.entry(ip).or_default().len();
-        let num_v6_pfxs = peer_v6_pfxs_map.entry(ip).or_default().len();
-        let num_connected_asn = peer_connection.entry(ip).or_default().len();
-        let ip_clone = ip;
-        let asn_clone = asn;
-        peer_info_map.insert(
-            ip_clone,
-            PeerInfo {
-                ip: ip_clone,
-                asn: asn_clone,
-                num_v4_pfxs,
-                num_v6_pfxs,
-                num_connected_asns: num_connected_asn,
-            },
-        );
-    }
+    let peer_info = peer_stats_collector.into_peer_info(project, collector, file_url);
+    let pfx2as = pfx2as_collector.into_prefix2as(project, collector, file_url);
+    let as2rel_triple = as2rel_collector.into_as2rel_triple(project, collector, file_url);
 
-    let pfx2as = pfx2as_map
-        .into_iter()
-        .map(|((prefix, asn), count)| Prefix2AsCount { prefix, asn, count })
-        .collect();
-
-    let as2rel_global = compile_as2rel_count(&as2rel_map);
-    let as2rel_v4 = compile_as2rel_count(&as2rel_v4_map);
-    let as2rel_v6 = compile_as2rel_count(&as2rel_v6_map);
-
-    Ok((
-        RibPeerInfo {
-            project: project.to_string(),
-            collector: collector.to_string(),
-            rib_dump_url: file_url.to_string(),
-            peers: peer_info_map,
-        },
-        Prefix2As {
-            project: project.to_string(),
-            collector: collector.to_string(),
-            rib_dump_url: file_url.to_string(),
-            pfx2as,
-        },
-        (
-            As2Rel {
-                project: project.to_string(),
-                collector: collector.to_string(),
-                rib_dump_url: file_url.to_string(),
-                as2rel: as2rel_global,
-            },
-            As2Rel {
-                project: project.to_string(),
-                collector: collector.to_string(),
-                rib_dump_url: file_url.to_string(),
-                as2rel: as2rel_v4,
-            },
-            As2Rel {
-                project: project.to_string(),
-                collector: collector.to_string(),
-                rib_dump_url: file_url.to_string(),
-                as2rel: as2rel_v6,
-            },
-        ),
-    ))
+    Ok((peer_info, pfx2as, as2rel_triple))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::as2rel::dedup_path;
+    use crate::parse_rib_file;
     use serde_json::json;
     use std::fs::File;
     use tracing::{info, Level};

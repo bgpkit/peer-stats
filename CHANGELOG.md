@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Code Refactoring
+
+* Refactored lib.rs into dedicated modules (as2rel, peer_stats, pfx2as) with processor pattern
+* Moved types and constants into their corresponding processor modules
+* Removed unnecessary internal function exports from public API
+
+### Bug Fixes
+
+* Removed AS 1239 (Sprint) from tier-1 ASN list to match bgp.tools definition
+* Removed unnecessary ASN 0 placeholder from TIER1_V4 array
+
 ## v0.2.1 - 2025-04-09
 
 ### Highlights
