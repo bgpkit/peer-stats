@@ -3,4 +3,6 @@ venv
 
 .idea
 *.bz2
+*.gz
+*.json
 Cargo.lock
