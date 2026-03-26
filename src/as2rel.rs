@@ -24,31 +24,17 @@ pub const TRUE_TIER1: [u32; 14] = [
 ];
 
 /// Candidate Tier-1 ASes for IPv4 that may provide transit.
-/// These are only considered transit providers if their next hop is another tier-1 AS.
+/// These are only considered transit providers if their next hop is a TRUE_TIER1 AS.
 /// This prevents over-counting downstream ASes for networks that don't actually sell transit.
 pub const CANDIDATE_TIER1_V4: [u32; 1] = [
-    6461, // Zayo - only provides transit if connecting to another tier-1
+    6461, // Zayo - only provides transit if connecting to a true tier-1
 ];
 
 /// Candidate Tier-1 ASes for IPv6 that may provide transit.
 /// Same logic as CANDIDATE_TIER1_V4 but for IPv6 paths.
 pub const CANDIDATE_TIER1_V6: [u32; 2] = [
     6461, // Zayo - IPv6
-    6939, // Hurricane Electric (IPv6 only) - only provides transit if connecting to another tier-1
-];
-
-/// Combined Tier-1 lists for backward compatibility and global processing.
-/// These include both true tier-1s and candidates.
-pub const TIER1: [u32; 16] = [
-    6762, 12956, 2914, 3356, 6453, 701, 6461, 3257, 1299, 3491, 7018, 3320, 5511, 6830, 174, 6939,
-];
-
-pub const TIER1_V4: [u32; 15] = [
-    6762, 12956, 2914, 3356, 6453, 701, 6461, 3257, 1299, 3491, 7018, 3320, 5511, 6830, 174,
-];
-
-pub const TIER1_V6: [u32; 16] = [
-    6762, 12956, 2914, 3356, 6453, 701, 6461, 3257, 1299, 3491, 7018, 3320, 5511, 6830, 174, 6939,
+    6939, // Hurricane Electric (IPv6 only) - only provides transit if connecting to a true tier-1
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,33 +94,38 @@ fn count_peer_relationships(
 /// Determine the transit point in an AS path using the tier-1 algorithm.
 ///
 /// Algorithm:
-/// 1. Look for the first TRUE_TIER1 AS - this is always a valid transit provider
-/// 2. If we encounter a CANDIDATE_TIER1 AS first, check if its next hop is another tier-1 AS
-///    - If yes: this candidate is a valid transit provider
-///    - If no: continue looking for the next tier-1
-/// 3. Return the index of the first valid transit point, or None if none found
+/// 1. Look from origin towards collector for the first tier-1 AS (true or candidate)
+/// 2. If it's a TRUE_TIER1 AS: return it as the transit point
+/// 3. If it's a CANDIDATE_TIER1 AS: check if its next hop is a TRUE_TIER1 AS
+///    - If yes: return it as the transit point
+///    - If no: return None (stop here, don't look further)
 ///
-/// This prevents over-counting downstream ASes for networks like Zayo (6461) and
-/// Hurricane Electric (6939) that don't actually sell transit service unless they're
-/// connecting to another tier-1.
+/// This prevents over-counting downstream ASes. For Hurricane Electric and Zayo,
+/// we only consider them valid transit providers if they're directly adjacent to
+/// another tier-1 AS. Otherwise, we don't mark any p2c relationships for the path.
 pub fn find_transit_point(
     as_path: &[u32],
     true_tier1: &[u32],
-    all_tier1_set: &HashSet<u32>,
+    candidate_tier1: &[u32],
 ) -> Option<usize> {
+    let true_tier1_set: HashSet<u32> = true_tier1.iter().copied().collect();
+    let candidate_set: HashSet<u32> = candidate_tier1.iter().copied().collect();
+
     for (i, asn) in as_path.iter().enumerate() {
         // True tier-1: always valid transit
-        if true_tier1.contains(asn) {
+        if true_tier1_set.contains(asn) {
             return Some(i);
         }
 
-        // Candidate tier-1: only valid if next hop is also tier-1
-        if all_tier1_set.contains(asn)
-            && !true_tier1.contains(asn)
-            && i + 1 < as_path.len()
-            && all_tier1_set.contains(&as_path[i + 1])
-        {
-            return Some(i);
+        // Candidate tier-1: only valid if next hop is a TRUE_TIER1 AS
+        if candidate_set.contains(asn) {
+            if i + 1 < as_path.len() && true_tier1_set.contains(&as_path[i + 1]) {
+                // Candidate with tier-1 next hop - valid transit point
+                return Some(i);
+            } else {
+                // Candidate without tier-1 next hop - STOP, don't look further
+                return None;
+            }
         }
     }
 
@@ -149,7 +140,7 @@ pub fn find_transit_point(
 pub fn update_as2rel_map(
     peer_ip: IpAddr,
     true_tier1: &[u32],
-    all_tier1: &[u32],
+    candidate_tier1: &[u32],
     data_map: &mut HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)>,
     // input AS path must be from collector ([0]) to origin ([last])
     original_as_path: &[u32],
@@ -162,13 +153,12 @@ pub fn update_as2rel_map(
     // Reverse to process from origin towards collector
     as_path.reverse();
 
-    // Build tier-1 lookup set once
-    let all_tier1_set: HashSet<u32> = all_tier1.iter().copied().collect();
-
     // Find the transit point using the tier-1 algorithm
-    if let Some(transit_idx) = find_transit_point(&as_path, true_tier1, &all_tier1_set) {
+    if let Some(transit_idx) = find_transit_point(&as_path, true_tier1, candidate_tier1) {
         // Mark all ASes from origin up to (but not including) the transit point
-        // as customer -> provider relationships
+        // as customer -> provider relationships.
+        // We know all these providers are valid because find_transit_point only
+        // returns a transit point if it's a true tier-1 or candidate with tier-1 next hop.
         if transit_idx < as_path.len() - 1 {
             for i in 0..transit_idx {
                 let customer = as_path[i];
@@ -199,17 +189,44 @@ pub fn compile_as2rel_count(
         .collect()
 }
 
+/// Combine two relationship maps (v4 and v6) into a single global map.
+fn combine_as2rel_maps(
+    v4_map: &HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)>,
+    v6_map: &HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)>,
+) -> Vec<As2RelCount> {
+    let mut combined: HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)> = HashMap::new();
+
+    // Add all v4 entries
+    for ((asn1, asn2, rel), (count, peers)) in v4_map.iter() {
+        let entry = combined
+            .entry((*asn1, *asn2, *rel))
+            .or_insert((0, HashSet::new()));
+        entry.0 += *count;
+        entry.1.extend(peers.iter().copied());
+    }
+
+    // Add all v6 entries
+    for ((asn1, asn2, rel), (count, peers)) in v6_map.iter() {
+        let entry = combined
+            .entry((*asn1, *asn2, *rel))
+            .or_insert((0, HashSet::new()));
+        entry.0 += *count;
+        entry.1.extend(peers.iter().copied());
+    }
+
+    compile_as2rel_count(&combined)
+}
+
 /// Processor for collecting AS relationship data from BGP RIB dumps.
 ///
 /// Uses the tier-1 transit algorithm to distinguish between:
 /// - True tier-1 ASes that always provide transit
 /// - Candidate tier-1 ASes (Zayo, Hurricane Electric) that only provide transit
-///   when connecting to another tier-1
+///   when connecting to a true tier-1
 ///
 /// This prevents over-counting downstream ASes for networks that don't actually
 /// sell transit service in the traditional sense.
 pub struct As2RelProcessor {
-    as2rel_map: HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)>,
     as2rel_v4_map: HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)>,
     as2rel_v6_map: HashMap<(u32, u32, u8), (usize, HashSet<IpAddr>)>,
 }
@@ -217,7 +234,6 @@ pub struct As2RelProcessor {
 impl As2RelProcessor {
     pub fn new() -> Self {
         Self {
-            as2rel_map: HashMap::new(),
             as2rel_v4_map: HashMap::new(),
             as2rel_v6_map: HashMap::new(),
         }
@@ -227,19 +243,13 @@ impl As2RelProcessor {
     ///
     /// For IPv4: Uses TRUE_TIER1 and CANDIDATE_TIER1_V4
     /// For IPv6: Uses TRUE_TIER1 and CANDIDATE_TIER1_V6
-    /// Global: Uses combined TIER1 lists
     pub fn process_path(&mut self, peer_ip: IpAddr, prefix_type: IpNet, as_path: &[u32]) {
-        // Global as2rel (all paths) - uses old algorithm for compatibility
-        // Uses combined TIER1 list without candidate validation
-        update_as2rel_map(peer_ip, &TIER1, &TIER1, &mut self.as2rel_map, as_path);
-
-        // v4/v6 specific as2rel - uses new tier-1 transit algorithm
         match prefix_type {
             IpNet::V4(_) => {
                 update_as2rel_map(
                     peer_ip,
                     &TRUE_TIER1,
-                    &TIER1_V4,
+                    &CANDIDATE_TIER1_V4,
                     &mut self.as2rel_v4_map,
                     as_path,
                 );
@@ -248,7 +258,7 @@ impl As2RelProcessor {
                 update_as2rel_map(
                     peer_ip,
                     &TRUE_TIER1,
-                    &TIER1_V6,
+                    &CANDIDATE_TIER1_V6,
                     &mut self.as2rel_v6_map,
                     as_path,
                 );
@@ -257,15 +267,18 @@ impl As2RelProcessor {
     }
 
     /// Convert collected data into As2Rel structs.
+    /// Global as2rel is derived from combining v4 and v6 results.
     pub fn into_as2rel_triple(
         self,
         project: &str,
         collector: &str,
         rib_dump_url: &str,
     ) -> (As2Rel, As2Rel, As2Rel) {
-        let as2rel_global = compile_as2rel_count(&self.as2rel_map);
         let as2rel_v4 = compile_as2rel_count(&self.as2rel_v4_map);
         let as2rel_v6 = compile_as2rel_count(&self.as2rel_v6_map);
+
+        // Combine v4 and v6 for global results
+        let as2rel_global = combine_as2rel_maps(&self.as2rel_v4_map, &self.as2rel_v6_map);
 
         (
             As2Rel {
@@ -299,14 +312,12 @@ impl Default for As2RelProcessor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
 
     #[test]
     fn test_find_transit_point_true_tier1() {
         // True tier-1 should always be transit point
         let path = vec![100, 200, 174, 300]; // 174 (Cogent) is true tier-1
-        let all_tier1_set: HashSet<u32> = TIER1.iter().copied().collect();
-        let result = find_transit_point(&path, &TRUE_TIER1, &all_tier1_set);
+        let result = find_transit_point(&path, &TRUE_TIER1, &CANDIDATE_TIER1_V4);
         assert_eq!(result, Some(2)); // Index of 174
     }
 
@@ -314,8 +325,7 @@ mod tests {
     fn test_find_transit_point_candidate_with_tier1_next() {
         // 6461 (Zayo) with tier-1 next hop should be transit
         let path = vec![100, 200, 6461, 174, 300]; // 6461 -> 174 (tier-1)
-        let all_tier1_set: HashSet<u32> = TIER1_V4.iter().copied().collect();
-        let result = find_transit_point(&path, &TRUE_TIER1, &all_tier1_set);
+        let result = find_transit_point(&path, &TRUE_TIER1, &CANDIDATE_TIER1_V4);
         assert_eq!(result, Some(2)); // Index of 6461
     }
 
@@ -323,37 +333,64 @@ mod tests {
     fn test_find_transit_point_candidate_without_tier1_next() {
         // 6461 without tier-1 next hop should NOT be transit
         let path = vec![100, 200, 6461, 300, 400]; // 6461 -> 300 (not tier-1)
-        let all_tier1_set: HashSet<u32> = TIER1_V4.iter().copied().collect();
-        let result = find_transit_point(&path, &TRUE_TIER1, &all_tier1_set);
+        let result = find_transit_point(&path, &TRUE_TIER1, &CANDIDATE_TIER1_V4);
         assert_eq!(result, None); // No valid transit point
     }
 
     #[test]
-    fn test_find_transit_point_true_tier1_after_candidate() {
-        // True tier-1 after candidate that doesn't transit
+    fn test_find_transit_point_candidate_blocks_further_search() {
+        // When we encounter a candidate without tier-1 next hop, we STOP
+        // We do NOT continue looking for true tier-1s further down the path
         let path = vec![100, 200, 6461, 300, 174, 400];
         // 6461 at index 2 doesn't transit (300 not tier-1)
-        // 174 at index 4 is true tier-1
-        let all_tier1_set: HashSet<u32> = TIER1_V4.iter().copied().collect();
-        let result = find_transit_point(&path, &TRUE_TIER1, &all_tier1_set);
-        assert_eq!(result, Some(4)); // Index of 174
+        // We STOP here and return None, even though 174 is a true tier-1 later
+        let result = find_transit_point(&path, &TRUE_TIER1, &CANDIDATE_TIER1_V4);
+        assert_eq!(result, None); // No valid transit point - candidate blocks search
     }
 
     #[test]
     fn test_find_transit_point_he_with_tier1_next_v6() {
         // HE (6939) with tier-1 next hop should be valid transit (IPv6)
         let path = vec![100, 200, 6939, 174, 300]; // 6939 -> 174 (tier-1)
-        let all_tier1_set: HashSet<u32> = TIER1_V6.iter().copied().collect();
-        let result = find_transit_point(&path, &TRUE_TIER1, &all_tier1_set);
+        let result = find_transit_point(&path, &TRUE_TIER1, &CANDIDATE_TIER1_V6);
         assert_eq!(result, Some(2)); // Index of 6939
     }
 
     #[test]
     fn test_find_transit_point_he_without_tier1_next_v6() {
         // HE (6939) without tier-1 next hop should NOT be transit (IPv6)
+        // We STOP at 6939 and don't look further
         let path = vec![100, 200, 6939, 300, 400]; // 6939 -> 300 (not tier-1)
-        let all_tier1_set: HashSet<u32> = TIER1_V6.iter().copied().collect();
-        let result = find_transit_point(&path, &TRUE_TIER1, &all_tier1_set);
+        let result = find_transit_point(&path, &TRUE_TIER1, &CANDIDATE_TIER1_V6);
         assert_eq!(result, None); // No valid transit point
+    }
+
+    #[test]
+    fn test_he_not_candidate_in_v4() {
+        // HE (6939) should NOT be a valid candidate in IPv4
+        // Since 6939 is not in CANDIDATE_TIER1_V4, we skip it and continue
+        let path = vec![100, 200, 6939, 174, 300]; // 6939 -> 174 (tier-1)
+        let result = find_transit_point(&path, &TRUE_TIER1, &CANDIDATE_TIER1_V4);
+        // In v4, 6939 is not a candidate, so we skip it and find 174
+        assert_eq!(result, Some(3)); // Index of 174
+    }
+
+    #[test]
+    fn test_candidate_blocks_when_next_is_candidate_not_true() {
+        // When candidate's next hop is another candidate (not true tier-1), we STOP
+        // We do NOT continue to find if that next candidate is valid
+        let path = vec![100, 6461, 6939, 174, 300]; // 6461 -> 6939 -> 174
+                                                    // 6461 is candidate, next hop 6939 is also candidate (not true tier-1)
+                                                    // We STOP at 6461 and return None
+        let result = find_transit_point(&path, &TRUE_TIER1, &CANDIDATE_TIER1_V6);
+        assert_eq!(result, None); // 6461 blocks, we don't check 6939
+    }
+
+    #[test]
+    fn test_he_as_first_candidate_with_tier1_next() {
+        // HE as the first tier-1 encountered with true tier-1 next hop
+        let path = vec![100, 6939, 174, 300]; // 6939 -> 174 (tier-1)
+        let result = find_transit_point(&path, &TRUE_TIER1, &CANDIDATE_TIER1_V6);
+        assert_eq!(result, Some(1)); // Index of 6939
     }
 }
