@@ -10,6 +10,12 @@ All notable changes to this project will be documented in this file.
 * Moved types and constants into their corresponding processor modules
 * Removed unnecessary internal function exports from public API
 
+### Algorithm Changes
+
+* Added two-tier transit detection: `TRUE_TIER1` (14 ASes always valid) vs candidate tier-1 ASes (Zayo, Hurricane Electric) that are only valid transit providers when their next hop is also a tier-1
+* Hurricane Electric (AS 6939) is treated as a candidate tier-1 for IPv6 only, reducing its downstream count by ~70% at tested collectors
+* Zayo (AS 6461) is treated as a candidate tier-1 for both IPv4 and IPv6, reducing its downstream count by 14-18%
+
 ### Bug Fixes
 
 * Removed AS 1239 (Sprint) from tier-1 ASN list to match bgp.tools definition

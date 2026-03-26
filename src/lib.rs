@@ -1,11 +1,9 @@
-#![allow(dead_code)]
-
 pub mod as2rel;
 pub mod peer_stats;
 pub mod pfx2as;
 
 // Re-export tier-1 constants from as2rel
-pub use as2rel::{TIER1, TIER1_V4, TIER1_V6};
+pub use as2rel::{CANDIDATE_TIER1_V4, CANDIDATE_TIER1_V6, TIER1, TIER1_V4, TIER1_V6, TRUE_TIER1};
 
 // Re-export types from their respective modules
 pub use as2rel::{As2Rel, As2RelCount};
@@ -76,8 +74,6 @@ pub fn parse_rib_file(
             prefix_v6,
             connected_asn,
         );
-
-        drop(elem);
     }
 
     let peer_info = peer_stats_collector.into_peer_info(project, collector, file_url);
