@@ -61,11 +61,3 @@ path = "src/bin/index-as2rel.rs"
 [[bin]]
 name = "pfx2as-index"
 path = "src/bin/index-pfx2as.rs"
-
-[[bin]]
-name = "as2rel-collector-index"
-path = "src/bin/index-as2rel-collector.rs"
-
-[[bin]]
-name = "pfx2as-collector-index"
-path = "src/bin/index-pfx2as-collector.rs"
