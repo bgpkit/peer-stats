@@ -156,7 +156,7 @@ fn main() {
                     "{}/{}/{}/{:02}/{:02}",
                     output_dir,
                     "as2rel",
-                    &item.collector_id,
+                    item.collector_id,
                     ts.year(),
                     ts.month()
                 ),
@@ -164,7 +164,7 @@ fn main() {
                     "{}/{}/{}/{:02}/{:02}",
                     output_dir,
                     data_type,
-                    &item.collector_id,
+                    item.collector_id,
                     ts.year(),
                     ts.month()
                 ),
@@ -172,13 +172,13 @@ fn main() {
             fs::create_dir_all(file_dir.as_str()).unwrap();
             let output_path = format!(
                 "{}/{}_{}_{}-{:02}-{:02}_{}.bz2",
-                &file_dir,
+                file_dir,
                 data_type,
-                &item.collector_id,
+                item.collector_id,
                 ts.year(),
                 ts.month(),
                 ts.day(),
-                &timestamp
+                timestamp
             );
             if !opts.force && std::path::Path::new(output_path.as_str()).exists() {
                 info!(
