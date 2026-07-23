@@ -38,10 +38,10 @@ pub fn parse_rib_file(
     let mut pfx2as_collector = Pfx2AsProcessor::new();
     let mut as2rel_collector = As2RelProcessor::new();
 
-    for elem in BgpkitParser::new(file_url)? {
-        let peer_ip = elem.peer_ip;
-        let peer_asn = elem.peer_asn.to_u32();
-        let prefix = elem.prefix.prefix;
+    for route in BgpkitParser::new(file_url)?.into_route_iter() {
+        let peer_ip = route.peer_ip;
+        let peer_asn = route.peer_asn.to_u32();
+        let prefix = route.prefix.prefix;
 
         // Extract prefix info
         let (prefix_v4, prefix_v6) = match prefix {
@@ -49,9 +49,9 @@ pub fn parse_rib_file(
             IpNet::V6(net) => (None, Some(net)),
         };
 
-        // Process AS path data
+        // Process AS path data (borrowed via Arc, no clone needed)
         let mut connected_asn = None;
-        if let Some(as_path) = elem.as_path.clone() {
+        if let Some(ref as_path) = route.as_path {
             if let Some(u32_path) = as_path.to_u32_vec_opt(true) {
                 // Get connected ASN (second hop in path)
                 connected_asn = u32_path.get(1).copied();
