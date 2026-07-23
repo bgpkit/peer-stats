@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v0.3.0 - 2026-07-23
+
 ### New Features
 
 * Add collector-aware AS relationship output alongside classic aggregate (#13)
@@ -14,14 +16,15 @@ All notable changes to this project will be documented in this file.
 
 ### Performance
 
-* Switch to route-level BGP parser (`into_route_iter`) from bgpkit-parser v0.18.0
+* Switch to route-level BGP parser (`into_route_iter`) from bgpkit-parser v0.18.0 (#14)
   * ~19% faster on RIPE RIS bview files; larger gains expected on full RIB dumps
   * Eliminates per-path allocation by borrowing AS path via `Arc`
 
-### Dependencies
+### Algorithm Changes
 
-* bgpkit-parser: 0.11.0 → 0.18.0 (route-level parser, AS4_PATH merge fix, new attribute parsers)
-* bgpkit-broker: 0.7.5 → 0.11.0 (new collectors: locix.fra, ixpn.lagos, decix.fra, crix.sjo; SDK caching)
+* Added two-tier transit detection: `TRUE_TIER1` (14 ASes always valid) vs candidate tier-1 ASes (Zayo, Hurricane Electric) that are only valid transit providers when their next hop is also a tier-1
+* Hurricane Electric (AS 6939) is treated as a candidate tier-1 for IPv6 only, reducing its downstream count by ~70% at tested collectors
+* Zayo (AS 6461) is treated as a candidate tier-1 for both IPv4 and IPv6, reducing its downstream count by 14-18%
 
 ### Code Refactoring
 
@@ -29,11 +32,10 @@ All notable changes to this project will be documented in this file.
 * Moved types and constants into their corresponding processor modules
 * Removed unnecessary internal function exports from public API
 
-### Algorithm Changes
+### Dependencies
 
-* Added two-tier transit detection: `TRUE_TIER1` (14 ASes always valid) vs candidate tier-1 ASes (Zayo, Hurricane Electric) that are only valid transit providers when their next hop is also a tier-1
-* Hurricane Electric (AS 6939) is treated as a candidate tier-1 for IPv6 only, reducing its downstream count by ~70% at tested collectors
-* Zayo (AS 6461) is treated as a candidate tier-1 for both IPv4 and IPv6, reducing its downstream count by 14-18%
+* bgpkit-parser: 0.11.0 → 0.18.0 (route-level parser, AS4_PATH merge fix, new attribute parsers)
+* bgpkit-broker: 0.7.5 → 0.11.0 (new collectors: locix.fra, ixpn.lagos, decix.fra, crix.sjo; SDK caching)
 
 ### Bug Fixes
 
