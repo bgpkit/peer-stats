@@ -15,8 +15,8 @@ keywords = ["bgp", "bgpkit", "mrt"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bgpkit-parser = "0.11.0"
-bgpkit-broker = "0.7.5"
+bgpkit-parser = { version = "0.18.0", features = ["local"] }
+bgpkit-broker = "0.11.0"
 ipnet = "2.7.2"
 
 serde = { version = "1", features = ["derive"] }

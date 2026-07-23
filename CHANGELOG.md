@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### New Features
+
+* Add collector-aware AS relationship output alongside classic aggregate (#13)
+  * `as2rel-index` now produces per-collector provenance files (`*-collector-latest.json.bz2`)
+  * Classic output unchanged — no breaking changes to existing data pipeline
+  * Single file pass produces both outputs for all three prefixes (as2rel, as2rel-v4, as2rel-v6)
+  * Memory-efficient flat-vector + sort approach (~1.7GB peak RSS for 21M records)
+
+### Performance
+
+* Switch to route-level BGP parser (`into_route_iter`) from bgpkit-parser v0.18.0
+  * ~19% faster on RIPE RIS bview files; larger gains expected on full RIB dumps
+  * Eliminates per-path allocation by borrowing AS path via `Arc`
+
+### Dependencies
+
+* bgpkit-parser: 0.11.0 → 0.18.0 (route-level parser, AS4_PATH merge fix, new attribute parsers)
+* bgpkit-broker: 0.7.5 → 0.11.0 (new collectors: locix.fra, ixpn.lagos, decix.fra, crix.sjo; SDK caching)
+
 ### Code Refactoring
 
 * Refactored lib.rs into dedicated modules (as2rel, peer_stats, pfx2as) with processor pattern
@@ -20,6 +39,8 @@ All notable changes to this project will be documented in this file.
 
 * Removed AS 1239 (Sprint) from tier-1 ASN list to match bgp.tools definition
 * Removed unnecessary ASN 0 placeholder from TIER1_V4 array
+* Fix candidate tier-1 transit detection to stop at failing candidates (#12)
+* Fix clippy warnings in bootstrap.rs (useless borrows in format! macros)
 
 ## v0.2.1 - 2025-04-09
 
